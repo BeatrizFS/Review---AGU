@@ -1,51 +1,47 @@
-POST
-/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages
-Creates a benefit package resource.
+### 2. `ServiceContract` (record type `Benefit Package`) is the package header
+| Contract / flow attribute | Salesforce field | Type | Notes |
+|---|---|---|---|
+| `benefit_package_id` | `Id` | Id (18) | Read-only, platform-generated. See decision 6. |
+| Package name (flow only) | `Name` | Text(255) | Standard. Flow example: `Gold 400102`. |
+| Activation number (flow only) | `ContractNumber` | Auto Number | Standard, read-only. Displayed on the activation confirmation screen. |
+| `status` | Package Status (`Package_Status__c`) | Picklist | `Draft`, `Awaiting Start`, `Active`, `Cancelled`, `Expired`. Source of truth for the API. See decision 5. |
+| — | `Status` | Picklist | Standard, **read-only and platform-derived** (`Inactive`, `Active`, `Expired`). Neither written nor read by this solution. `ServiceContract` has no `StatusCode` field. |
+| `product_reference` | Product Reference (`Product_Reference__c`) | Text(10) | Contract value, e.g. `I_C_BR`. Indexed as External Id for catalogue lookup. |
+| `product_reference` (resolved) | Product (`Product__c`) | Lookup(`Product__c`) | Link to the existing content catalogue. Populated by Apex from `Product_Reference__c`. |
+| `active_start_at` | `StartDate` | Date | Standard. |
+| `active_end_at` | `EndDate` | Date | Standard. |
+| — | `Term` | Number(4,0) | Standard. Whole months between `StartDate` and `EndDate`, set by Apex on write. |
+| `amount_of_policies` | Amount of Policies (`Amount_of_Policies__c`) | Number(9,0) | Agent-declared, minimum 1. Drives `ContractLineItem.Quantity`. |
+| `affected_policy_range.external_number_start_at` | Policy Range Start (`Policy_Range_Start__c`) | Text(10) | |
+| `affected_policy_range.external_number_end_at` | Policy Range End (`Policy_Range_End__c`) | Text(10) | |
 
-Jump to definition
-Cf. summary
+`Pricebook2Id` is populated with the benefits price book (decision 4), which is what allows
+`ContractLineItem` rows to be inserted.
 
-Parameters
-Try it out
-No parameters
+### 3. `ContractLineItem` is the benefit line, one row per benefit
 
-Request body
+Both `core_benefits` and `optional_benefits` of the contract map to the same object, separated
+by a category field. A single line object keeps the roll-up arithmetic native and removes the
+need to union two collections when serialising the response.
 
-application/json
-Example Value
-Schema
-{
-  "product_reference": "I_C_BR",
-  "active_start_at": "2028-05-22",
-  "active_end_at": "2029-05-22",
-  "amount_of_policies": 12500,
-  "affected_policy_range": {
-    "external_number_start_at": "1234569890",
-    "external_number_end_at": "1234569890"
-  },
-  "core_benefits": [
-    {
-      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
-      "name": "International Emergency Medical Services"
-    }
-  ],
-  "optional_benefits": [
-    {
-      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
-      "name": "International Emergency Medical Services"
-    }
-  ],
-  "legal_consents": [
-    {
-      "code": "legal_consent_I_understand",
-      "is_confirmed": true,
-      "consented_at": "2019-03-22T10:59:00Z"
-    }
-  ]
-}
+| Contract / flow attribute | Salesforce field | Type | Notes |
+|---|---|---|---|
+| `benefit_id` | Benefit (`Benefit__c`) | Lookup(`Benefit__c`) | Semantic link to the existing catalogue. The exposed `benefit_id` is `Benefit__r.Visa_External_Reference__c`, not the record Id. See decision 6. |
+| `name` | `Benefit__r.Name` | — | Read from the catalogue, never copied. Single source of truth for the benefit name. Localised variants exist as `Benefit_Name_EN__c`, `Benefit_Name_es__c` and `Benefit_Name_pt_BR__c`. |
+| `description` | `Benefit__r.Benefit_Description__c` | — | Read from the catalogue. Optional benefits only, per the contract. |
+| core vs optional | Benefit Category (`Benefit_Category__c`) | Picklist | `Core`, `Optional`. Required. |
+| — | `PricebookEntryId` | Lookup | Standard, mandatory. Resolves the price and currency. |
+| — | `Product2Id` | Lookup | Standard, derived from `PricebookEntryId`. |
+| — | `Quantity` | Number | Standard, mandatory. Set to `ServiceContract.Amount_of_Policies__c` — pricing in the flow is per card. |
 
+Core benefits are persisted as lines rather than derived on read. The catalogue can change
+after the package is created, and the package must keep the composition that the agent accepted
+in the agreement — a derived list would silently rewrite history.
 
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+Cmapo de Legal ConsentItem criado
+
+Classe
+@RestResource(urlMapping='/sales/enterprise/transversal/')
 global with sharing class VOBPSalesBenefitPackages_V1 {
 
     private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
@@ -74,8 +70,7 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
             WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
                 RestContext, 
                 new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
-                    'urn:axa.partners.benefits_platform.write'
+
                 }
             );
 
@@ -86,7 +81,9 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
             BenefitPackage benefitPackageRequest = (BenefitPackage)JSON.deserializeStrict(requestBody, BenefitPackage.class);
             validateRequiredPostFields(requestBody, benefitPackageRequest);
 
-            // Implement the logic to handle the creation of a new benefit package here.
+            ServiceContract contract = buildServiceContract(benefitPackageRequest);
+
+            
             
 
         } catch (WebportalApiUtility_v1.RequestAPIException ex) {
@@ -224,6 +221,53 @@ Benefit__c.Id
 A API usa:
 Benefit__c.Visa_External_Reference__c
 
+Yaml
+/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages
+Creates a benefit package resource.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+No parameters
+
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "product_reference": "I_C_BR",
+  "active_start_at": "2028-05-22",
+  "active_end_at": "2029-05-22",
+  "amount_of_policies": 12500,
+  "affected_policy_range": {
+    "external_number_start_at": "1234569890",
+    "external_number_end_at": "1234569890"
+  },
+  "core_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "optional_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "legal_consents": [
+    {
+      "code": "legal_consent_I_understand",
+      "is_confirmed": true,
+      "consented_at": "2019-03-22T10:59:00Z"
+    }
+  ]
+}
+Responses
+Code	Description	Links
 201	
 Benefit package created successfully.
 
@@ -291,7 +335,8 @@ Schema
   "status_code": "500",
   "error": "Internal Server Error"
 }
-
+No links
+Extensions
 BenefitPackage{
 status*	[...]
 benefit_package_id*	string
@@ -393,558 +438,4 @@ Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
  
 }
 
-Tem algumas regras que devem ser aplicadas como descritas aí
-eu tenho já os campos que vai armazernar as informações sobre o LegalConsentItem
-tenho uma estrutura interressante
-
-                request.legal_consents                 = new List<ConsentValidation>{new ConsentValidation(),new ConsentValidation(),new ConsentValidation()};
-                request.legal_consents[0].code         = 'legal_consent_I_understand';
-                request.legal_consents[0].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[0].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-                request.legal_consents[1].code         = 'legal_consent_I_authorize';
-                request.legal_consents[1].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[1].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-                request.legal_consents[2].code         = 'legal_consent_I_agree';
-                request.legal_consents[2].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[2].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-
-tenho que validar se o campo é null ou se ele é requirido e não foi adicionado eu tenho metodo utilitatio para isso 
-
-        if (!checkError && request.legal_consents != null) {
-            for (ConsentValidation consent : request.legal_consents) {
-                if (String.isBlank(consent.code)) {
-                    validationError = buildErrorMessage('400','bad_request','legal_consents.code','Invalid request body. legal_consents.code is mandatory');
-                    checkError = true;
-                } else if (consent.is_confirmed == null) {
-                    validationError = buildErrorMessage('400','bad_request','legal_consents.is_confirmed','Invalid request body. legal_consents.is_confirmed is mandatory');
-                    checkError = true;
-                }else if (consent.is_confirmed != true) {
-                    validationError = buildErrorMessage('400','bad_request','legal_consents.is_confirmed','Invalid request body. legal_consents.is_confirmed must be true');
-                    checkError = true;
-                }
-            }
-        }
-
-        if(request.legal_consents != null && request.legal_consents.size() > 0) {
-            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_code__c',         request.legal_consents[0].code, ignoreRequest);
-            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_is_confirmed__c', request.legal_consents[0].is_confirmed != null ? request.legal_consents[0].is_confirmed                      : false, ignoreRequest);
-
-            if (request.legal_consents[0].consented_at != null && request.legal_consents[0].consented_at.contains('T') && request.legal_consents[0].consented_at.contains('Z')) {
-                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('T', ' ');
-                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('Z', '');
-                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
-            } else {
-                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
-            }
-        }
-
---------------
-
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
-global with sharing class VOBPSalesBenefitPackages_V1 {
-
-    /**********************************************************************
-     * CONSTANTS
-     **********************************************************************/
-
-    private static final Set<String> POST_REQUIRED_FIELDS = ...;
-
-    private static final Map<Status,String> PACKAGE_STATUS_MAP = ...;
-
-    /**********************************************************************
-     * HTTP METHODS
-     **********************************************************************/
-
-    @HttpPost
-    global static void doPost(){
-        handlePost();
-    }
-
-    @HttpGet
-    global static void doGet(){
-        handleGet();
-    }
-
-    /**********************************************************************
-     * HANDLERS
-     **********************************************************************/
-
-    private static void handlePost(){
-
-        try{
-
-            initializeResponse();
-
-            validateAccess();
-
-            BenefitPackageRequest request =
-                getBenefitPackageRequest();
-
-            validateBenefitPackage(request);
-
-            ServiceContract contract =
-                buildServiceContract(request);
-
-            insert contract;
-
-            createContractLineItems(
-                contract.Id,
-                request
-            );
-
-            saveLegalConsents(
-                contract,
-                request
-            );
-
-            buildPostResponse(
-                contract
-            );
-
-        }
-        catch(WebportalApiUtility_v1.RequestAPIException ex){
-
-            handleRequestException(ex);
-
-        }
-        catch(JSONException ex){
-
-            handleJsonException();
-
-        }
-        catch(Exception ex){
-
-            handleUnexpectedException(ex);
-
-        }
-
-    }
-
-    private static void handleGet(){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * INITIALIZATION
-     **********************************************************************/
-
-    private static void initializeResponse(){
-
-        RestContext.response.addHeader(
-            'Content-Type',
-            'application/json'
-        );
-
-    }
-
-    /**********************************************************************
-     * AUTHENTICATION
-     **********************************************************************/
-
-    private static void validateAccess(){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * REQUEST
-     **********************************************************************/
-
-    private static BenefitPackageRequest getBenefitPackageRequest(){
-
-        //remove html
-
-        //deserialize
-
-        //validate required fields
-
-        //return request
-
-    }
-
-    /**********************************************************************
-     * VALIDATION
-     **********************************************************************/
-
-    private static void validateBenefitPackage(
-        BenefitPackageRequest request){
-
-        validateDates(request);
-
-        validatePolicies(request);
-
-        validateStatus(request);
-
-        validateAffectedPolicyRange(request);
-
-        validateBenefits(request);
-
-        validateLegalConsents(request);
-
-    }
-
-    private static void validateDates(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void validatePolicies(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void validateStatus(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void validateAffectedPolicyRange(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void validateBenefits(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void validateLegalConsents(
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * BUILDERS
-     **********************************************************************/
-
-    private static ServiceContract buildServiceContract(
-        BenefitPackageRequest request){
-
-        ServiceContract contract =
-            new ServiceContract();
-
-        populateProduct(
-            contract,
-            request
-        );
-
-        populateDates(
-            contract,
-            request
-        );
-
-        populateStatus(
-            contract,
-            request
-        );
-
-        populatePolicies(
-            contract,
-            request
-        );
-
-        populatePolicyRange(
-            contract,
-            request
-        );
-
-        return contract;
-
-    }
-
-    private static void populateProduct(
-        ServiceContract contract,
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void populateDates(
-        ServiceContract contract,
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void populateStatus(
-        ServiceContract contract,
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void populatePolicies(
-        ServiceContract contract,
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    private static void populatePolicyRange(
-        ServiceContract contract,
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * CONTRACT LINE ITEMS
-     **********************************************************************/
-
-    private static void createContractLineItems(
-
-        Id contractId,
-
-        BenefitPackageRequest request){
-
-        List<ContractLineItem> items =
-            buildContractLineItems(
-                contractId,
-                request
-            );
-
-        if(!items.isEmpty()){
-
-            insert items;
-
-        }
-
-    }
-
-    private static List<ContractLineItem> buildContractLineItems(
-
-        Id contractId,
-
-        BenefitPackageRequest request){
-
-        //TODO
-
-        return new List<ContractLineItem>();
-
-    }
-
-    /**********************************************************************
-     * LEGAL CONSENTS
-     **********************************************************************/
-
-    private static void saveLegalConsents(
-
-        ServiceContract contract,
-
-        BenefitPackageRequest request){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * RESPONSE
-     **********************************************************************/
-
-    private static void buildPostResponse(
-        ServiceContract contract){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * QUERIES
-     **********************************************************************/
-
-    private static Id getProductId(
-        String productReference){
-
-        //TODO
-
-    }
-
-    private static Map<String,Benefit__c> getBenefits(
-
-        Set<String> externalReferences){
-
-        //TODO
-
-    }
-
-    private static Map<Id,PricebookEntry> getPricebookEntries(
-
-        Set<Id> productIds){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * UTILS
-     **********************************************************************/
-
-    private static Date normalizeStartDate(
-        Date startDate){
-
-        //TODO
-
-    }
-
-    private static String getPackageStatus(
-        String apiStatus){
-
-        //TODO
-
-    }
-
-    private static Datetime parseDatetime(
-        String value){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * ERROR HANDLING
-     **********************************************************************/
-
-    private static void handleRequestException(
-
-        WebportalApiUtility_v1.RequestAPIException ex){
-
-        //TODO
-
-    }
-
-    private static void handleJsonException(){
-
-        //TODO
-
-    }
-
-    private static void handleUnexpectedException(
-        Exception ex){
-
-        //TODO
-
-    }
-
-    /**********************************************************************
-     * ENUMS
-     **********************************************************************/
-
-    private enum Status{
-
-        DRAFT,
-
-        AWAITING_START,
-
-        ACTIVE,
-
-        CANCELLED,
-
-        EXPIRED
-
-    }
-
-    /**********************************************************************
-     * REQUEST CLASSES
-     **********************************************************************/
-
-    public class BenefitPackageRequest{
-
-        public String product_reference;
-
-        public Date active_start_at;
-
-        public Date active_end_at;
-
-        public Integer amount_of_policies;
-
-        public AffectedPolicyRange affected_policy_range;
-
-        public List<BenefitItem> core_benefits;
-
-        public List<BenefitItem> optional_benefits;
-
-        public List<LegalConsentItem> legal_consents;
-
-    }
-
-    public class AffectedPolicyRange{
-
-        public String external_number_start_at;
-
-        public String external_number_end_at;
-
-    }
-
-    public class BenefitItem{
-
-        public String benefit_id;
-
-        public String name;
-
-    }
-
-    public class LegalConsentItem{
-
-        public String code;
-
-        public Boolean is_confirmed;
-
-        public String consented_at;
-
-    }
-
-    /**********************************************************************
-     * RESPONSE CLASSES
-     **********************************************************************/
-
-    public class BenefitPackagePostResponse{
-
-        public String benefit_package_id;
-
-    }
-
-    public class BenefitPackageResponse{
-
-        public String benefit_package_id;
-
-        public List<String> status;
-
-        public String product_reference;
-
-        public Date active_start_at;
-
-        public Date active_end_at;
-
-        public Integer amount_of_policies;
-
-        public AffectedPolicyRange affected_policy_range;
-
-        public List<BenefitItem> core_benefits;
-
-        public List<BenefitItem> optional_benefits;
-
-        public List<LegalConsentItem> legal_consents;
-
-    }
-
-}
+Preciso de uma classe limpa e funcional aplicando as regras descritas, seguindo boas praticas de programação e padrões presentes no meu projeto.
