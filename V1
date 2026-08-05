@@ -181,3 +181,49 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
     }
 
 }
+-----------------
+
+Tenho algumas regras para o LegalConsentItem para atender os padrões da org
+        if(request.legal_consents != null && request.legal_consents.size() > 0) {
+            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_code__c',         request.legal_consents[0].code, ignoreRequest);
+            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_is_confirmed__c', request.legal_consents[0].is_confirmed != null ? request.legal_consents[0].is_confirmed                      : false, ignoreRequest);
+
+            if (request.legal_consents[0].consented_at != null && request.legal_consents[0].consented_at.contains('T') && request.legal_consents[0].consented_at.contains('Z')) {
+                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('T', ' ');
+                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('Z', '');
+                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
+            } else {
+                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
+            }
+        }
+                request.legal_consents                 = new List<ConsentValidation>{new ConsentValidation(),new ConsentValidation(),new ConsentValidation()};
+                request.legal_consents[0].code         = 'legal_consent_I_understand';
+                request.legal_consents[0].is_confirmed = claim.Legal_consents_is_confirmed__c;
+                request.legal_consents[0].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
+                request.legal_consents[1].code         = 'legal_consent_I_authorize';
+                request.legal_consents[1].is_confirmed = claim.Legal_consents_is_confirmed__c;
+                request.legal_consents[1].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
+                request.legal_consents[2].code         = 'legal_consent_I_agree';
+                request.legal_consents[2].is_confirmed = claim.Legal_consents_is_confirmed__c;
+                request.legal_consents[2].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
+em uma das minhas classes é tratado dessa maneira e deve segui assim para o Service contract ambém
+
+legal_consents*	[
+maxItems: 5
+List of consents that apply to the benefit package.
+
+LegalConsentItem{Jump to definition
+code*	string
+maxLength: 50
+example: legal_consent_I_understand
+Code of the consent such as
+
+legal_consent_I_understand
+legal_consent_I_authorize
+...
+is_confirmed	boolean
+Indicates if the consent has been confirmed or not.
+
+consented_at	string($date-time)
+example: 2019-03-22T10:59:00Z
+Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
