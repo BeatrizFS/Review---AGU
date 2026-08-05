@@ -227,3 +227,25 @@ Indicates if the consent has been confirmed or not.
 consented_at	string($date-time)
 example: 2019-03-22T10:59:00Z
 Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
+----------------------------
+
+
+No doPost() / doPatch() — Gravação no banco (POST/PATCH)
+O método createCase() persiste apenas o primeiro elemento da lista (index [0]):
+if(request.legal_consents != null && request.legal_consents.size() > 0) {
+    caseRecord.Legal_consents_code__c         = request.legal_consents[0].code;
+    caseRecord.Legal_consents_is_confirmed__c = request.legal_consents[0].is_confirmed ?? false;
+    caseRecord.Legal_consents_consented_at__c = request.legal_consents[0].consented_at != null
+        ? Datetime.valueOfGmt(...)
+        : null;
+}
+O campo consented_at tem tratamento especial para normalizar o formato ISO 8601:
+// "2024-01-01T10:00:00Z" → remove 'T' e 'Z' → "2024-01-01 10:00:00"
+if (consented_at.contains('T') && consented_at.contains('Z')) {
+    consented_at = consented_at.replace('T', ' ').replace('Z', '');
+}
+// "2024-01-01T10:00:00Z" → remove 'T' e 'Z' → "2024-01-01 10:00:00"
+if (consented_at.contains('T') && consented_at.contains('Z')) {
+    consented_at = consented_at.replace('T', ' ').replace('Z', '');
+}
+POST/PATCH → valida lista completa → grava apenas [0] no Case (3 campos)
