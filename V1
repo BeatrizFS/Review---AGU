@@ -438,4 +438,513 @@ tenho que validar se o campo é null ou se ele é requirido e não foi adicionad
             }
         }
 
+--------------
 
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class VOBPSalesBenefitPackages_V1 {
+
+    /**********************************************************************
+     * CONSTANTS
+     **********************************************************************/
+
+    private static final Set<String> POST_REQUIRED_FIELDS = ...;
+
+    private static final Map<Status,String> PACKAGE_STATUS_MAP = ...;
+
+    /**********************************************************************
+     * HTTP METHODS
+     **********************************************************************/
+
+    @HttpPost
+    global static void doPost(){
+        handlePost();
+    }
+
+    @HttpGet
+    global static void doGet(){
+        handleGet();
+    }
+
+    /**********************************************************************
+     * HANDLERS
+     **********************************************************************/
+
+    private static void handlePost(){
+
+        try{
+
+            initializeResponse();
+
+            validateAccess();
+
+            BenefitPackageRequest request =
+                getBenefitPackageRequest();
+
+            validateBenefitPackage(request);
+
+            ServiceContract contract =
+                buildServiceContract(request);
+
+            insert contract;
+
+            createContractLineItems(
+                contract.Id,
+                request
+            );
+
+            saveLegalConsents(
+                contract,
+                request
+            );
+
+            buildPostResponse(
+                contract
+            );
+
+        }
+        catch(WebportalApiUtility_v1.RequestAPIException ex){
+
+            handleRequestException(ex);
+
+        }
+        catch(JSONException ex){
+
+            handleJsonException();
+
+        }
+        catch(Exception ex){
+
+            handleUnexpectedException(ex);
+
+        }
+
+    }
+
+    private static void handleGet(){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * INITIALIZATION
+     **********************************************************************/
+
+    private static void initializeResponse(){
+
+        RestContext.response.addHeader(
+            'Content-Type',
+            'application/json'
+        );
+
+    }
+
+    /**********************************************************************
+     * AUTHENTICATION
+     **********************************************************************/
+
+    private static void validateAccess(){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * REQUEST
+     **********************************************************************/
+
+    private static BenefitPackageRequest getBenefitPackageRequest(){
+
+        //remove html
+
+        //deserialize
+
+        //validate required fields
+
+        //return request
+
+    }
+
+    /**********************************************************************
+     * VALIDATION
+     **********************************************************************/
+
+    private static void validateBenefitPackage(
+        BenefitPackageRequest request){
+
+        validateDates(request);
+
+        validatePolicies(request);
+
+        validateStatus(request);
+
+        validateAffectedPolicyRange(request);
+
+        validateBenefits(request);
+
+        validateLegalConsents(request);
+
+    }
+
+    private static void validateDates(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void validatePolicies(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void validateStatus(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void validateAffectedPolicyRange(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void validateBenefits(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void validateLegalConsents(
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * BUILDERS
+     **********************************************************************/
+
+    private static ServiceContract buildServiceContract(
+        BenefitPackageRequest request){
+
+        ServiceContract contract =
+            new ServiceContract();
+
+        populateProduct(
+            contract,
+            request
+        );
+
+        populateDates(
+            contract,
+            request
+        );
+
+        populateStatus(
+            contract,
+            request
+        );
+
+        populatePolicies(
+            contract,
+            request
+        );
+
+        populatePolicyRange(
+            contract,
+            request
+        );
+
+        return contract;
+
+    }
+
+    private static void populateProduct(
+        ServiceContract contract,
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void populateDates(
+        ServiceContract contract,
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void populateStatus(
+        ServiceContract contract,
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void populatePolicies(
+        ServiceContract contract,
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    private static void populatePolicyRange(
+        ServiceContract contract,
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * CONTRACT LINE ITEMS
+     **********************************************************************/
+
+    private static void createContractLineItems(
+
+        Id contractId,
+
+        BenefitPackageRequest request){
+
+        List<ContractLineItem> items =
+            buildContractLineItems(
+                contractId,
+                request
+            );
+
+        if(!items.isEmpty()){
+
+            insert items;
+
+        }
+
+    }
+
+    private static List<ContractLineItem> buildContractLineItems(
+
+        Id contractId,
+
+        BenefitPackageRequest request){
+
+        //TODO
+
+        return new List<ContractLineItem>();
+
+    }
+
+    /**********************************************************************
+     * LEGAL CONSENTS
+     **********************************************************************/
+
+    private static void saveLegalConsents(
+
+        ServiceContract contract,
+
+        BenefitPackageRequest request){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * RESPONSE
+     **********************************************************************/
+
+    private static void buildPostResponse(
+        ServiceContract contract){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * QUERIES
+     **********************************************************************/
+
+    private static Id getProductId(
+        String productReference){
+
+        //TODO
+
+    }
+
+    private static Map<String,Benefit__c> getBenefits(
+
+        Set<String> externalReferences){
+
+        //TODO
+
+    }
+
+    private static Map<Id,PricebookEntry> getPricebookEntries(
+
+        Set<Id> productIds){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * UTILS
+     **********************************************************************/
+
+    private static Date normalizeStartDate(
+        Date startDate){
+
+        //TODO
+
+    }
+
+    private static String getPackageStatus(
+        String apiStatus){
+
+        //TODO
+
+    }
+
+    private static Datetime parseDatetime(
+        String value){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * ERROR HANDLING
+     **********************************************************************/
+
+    private static void handleRequestException(
+
+        WebportalApiUtility_v1.RequestAPIException ex){
+
+        //TODO
+
+    }
+
+    private static void handleJsonException(){
+
+        //TODO
+
+    }
+
+    private static void handleUnexpectedException(
+        Exception ex){
+
+        //TODO
+
+    }
+
+    /**********************************************************************
+     * ENUMS
+     **********************************************************************/
+
+    private enum Status{
+
+        DRAFT,
+
+        AWAITING_START,
+
+        ACTIVE,
+
+        CANCELLED,
+
+        EXPIRED
+
+    }
+
+    /**********************************************************************
+     * REQUEST CLASSES
+     **********************************************************************/
+
+    public class BenefitPackageRequest{
+
+        public String product_reference;
+
+        public Date active_start_at;
+
+        public Date active_end_at;
+
+        public Integer amount_of_policies;
+
+        public AffectedPolicyRange affected_policy_range;
+
+        public List<BenefitItem> core_benefits;
+
+        public List<BenefitItem> optional_benefits;
+
+        public List<LegalConsentItem> legal_consents;
+
+    }
+
+    public class AffectedPolicyRange{
+
+        public String external_number_start_at;
+
+        public String external_number_end_at;
+
+    }
+
+    public class BenefitItem{
+
+        public String benefit_id;
+
+        public String name;
+
+    }
+
+    public class LegalConsentItem{
+
+        public String code;
+
+        public Boolean is_confirmed;
+
+        public String consented_at;
+
+    }
+
+    /**********************************************************************
+     * RESPONSE CLASSES
+     **********************************************************************/
+
+    public class BenefitPackagePostResponse{
+
+        public String benefit_package_id;
+
+    }
+
+    public class BenefitPackageResponse{
+
+        public String benefit_package_id;
+
+        public List<String> status;
+
+        public String product_reference;
+
+        public Date active_start_at;
+
+        public Date active_end_at;
+
+        public Integer amount_of_policies;
+
+        public AffectedPolicyRange affected_policy_range;
+
+        public List<BenefitItem> core_benefits;
+
+        public List<BenefitItem> optional_benefits;
+
+        public List<LegalConsentItem> legal_consents;
+
+    }
+
+}
