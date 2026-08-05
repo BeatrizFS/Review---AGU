@@ -1,441 +1,183 @@
-### 2. `ServiceContract` (record type `Benefit Package`) is the package header
-| Contract / flow attribute | Salesforce field | Type | Notes |
-|---|---|---|---|
-| `benefit_package_id` | `Id` | Id (18) | Read-only, platform-generated. See decision 6. |
-| Package name (flow only) | `Name` | Text(255) | Standard. Flow example: `Gold 400102`. |
-| Activation number (flow only) | `ContractNumber` | Auto Number | Standard, read-only. Displayed on the activation confirmation screen. |
-| `status` | Package Status (`Package_Status__c`) | Picklist | `Draft`, `Awaiting Start`, `Active`, `Cancelled`, `Expired`. Source of truth for the API. See decision 5. |
-| — | `Status` | Picklist | Standard, **read-only and platform-derived** (`Inactive`, `Active`, `Expired`). Neither written nor read by this solution. `ServiceContract` has no `StatusCode` field. |
-| `product_reference` | Product Reference (`Product_Reference__c`) | Text(10) | Contract value, e.g. `I_C_BR`. Indexed as External Id for catalogue lookup. |
-| `product_reference` (resolved) | Product (`Product__c`) | Lookup(`Product__c`) | Link to the existing content catalogue. Populated by Apex from `Product_Reference__c`. |
-| `active_start_at` | `StartDate` | Date | Standard. |
-| `active_end_at` | `EndDate` | Date | Standard. |
-| — | `Term` | Number(4,0) | Standard. Whole months between `StartDate` and `EndDate`, set by Apex on write. |
-| `amount_of_policies` | Amount of Policies (`Amount_of_Policies__c`) | Number(9,0) | Agent-declared, minimum 1. Drives `ContractLineItem.Quantity`. |
-| `affected_policy_range.external_number_start_at` | Policy Range Start (`Policy_Range_Start__c`) | Text(10) | |
-| `affected_policy_range.external_number_end_at` | Policy Range End (`Policy_Range_End__c`) | Text(10) | |
-
-`Pricebook2Id` is populated with the benefits price book (decision 4), which is what allows
-`ContractLineItem` rows to be inserted.
-
-### 3. `ContractLineItem` is the benefit line, one row per benefit
-
-Both `core_benefits` and `optional_benefits` of the contract map to the same object, separated
-by a category field. A single line object keeps the roll-up arithmetic native and removes the
-need to union two collections when serialising the response.
-
-| Contract / flow attribute | Salesforce field | Type | Notes |
-|---|---|---|---|
-| `benefit_id` | Benefit (`Benefit__c`) | Lookup(`Benefit__c`) | Semantic link to the existing catalogue. The exposed `benefit_id` is `Benefit__r.Visa_External_Reference__c`, not the record Id. See decision 6. |
-| `name` | `Benefit__r.Name` | — | Read from the catalogue, never copied. Single source of truth for the benefit name. Localised variants exist as `Benefit_Name_EN__c`, `Benefit_Name_es__c` and `Benefit_Name_pt_BR__c`. |
-| `description` | `Benefit__r.Benefit_Description__c` | — | Read from the catalogue. Optional benefits only, per the contract. |
-| core vs optional | Benefit Category (`Benefit_Category__c`) | Picklist | `Core`, `Optional`. Required. |
-| — | `PricebookEntryId` | Lookup | Standard, mandatory. Resolves the price and currency. |
-| — | `Product2Id` | Lookup | Standard, derived from `PricebookEntryId`. |
-| — | `Quantity` | Number | Standard, mandatory. Set to `ServiceContract.Amount_of_Policies__c` — pricing in the flow is per card. |
-
-Core benefits are persisted as lines rather than derived on read. The catalogue can change
-after the package is created, and the package must keep the composition that the agent accepted
-in the agreement — a derived list would silently rewrite history.
-
-Cmapo de Legal ConsentItem criado
-
-Classe
-@RestResource(urlMapping='/sales/enterprise/transversal/')
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
 global with sharing class VOBPSalesBenefitPackages_V1 {
+
+    /*
+     * =========================================================================
+     * Constants
+     * =========================================================================
+     */
 
     private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
         'product_reference',
         'active_start_at',
         'active_end_at',
         'amount_of_policies',
-        //'affected_policy_range',
         'core_benefits',
         'optional_benefits',
-        'legal_consents',
-        'benefit_id',
-        'name',
-        'code'
+        'legal_consents'
     };
+
+    private static final Map<String, String> PACKAGE_STATUS = new Map<String, String>{
+        'DRAFT' => 'Draft',
+        'AWAITING_START' => 'Awaiting Start',
+        'ACTIVE' => 'Active',
+        'CANCELLED' => 'Cancelled',
+        'EXPIRED' => 'Expired'
+    };
+
+    /*
+     * =========================================================================
+     * REST
+     * =========================================================================
+     */
 
     @HttpPost
     global static void doPost() {
         handlePost();
     }
 
+    /*
+     * =========================================================================
+     * Main Flow
+     * =========================================================================
+     */
+
     private static void handlePost() {
-        try{
-            RestContext.response.addHeader('Content-Type', 'application/json');
 
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext, 
-                new Set<String>{
+        RestContext.response.addHeader(
+            'Content-Type',
+            'application/json'
+        );
 
-                }
+        try {
+
+            authenticate();
+
+            BenefitPackage request =
+                parseRequest();
+
+            ServiceContract contract =
+                buildServiceContract(request);
+
+            insert contract;
+
+            List<ContractLineItem> contractLines =
+                buildContractLineItems(
+                    contract,
+                    request
+                );
+
+            if (!contractLines.isEmpty()) {
+                insert contractLines;
+            }
+
+            saveLegalConsents(
+                contract,
+                request
             );
 
-            String requestBody = RestContext.request.requestBody.toString().trim();
-            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
-            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+            BenefitPackagePostResponse response =
+                new BenefitPackagePostResponse();
 
-            BenefitPackage benefitPackageRequest = (BenefitPackage)JSON.deserializeStrict(requestBody, BenefitPackage.class);
-            validateRequiredPostFields(requestBody, benefitPackageRequest);
+            response.benefit_package_id =
+                contract.Id;
 
-            ServiceContract contract = buildServiceContract(benefitPackageRequest);
-
-            
-            
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-            if (ex.status_code == 401) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
-            } else if (ex.status_code == 403) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
-            } else {
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage(
-                            String.valueOf(ex.status_code),
-                            ex.error,
-                            ex.error_description
-                        )
-                    )
+            RestContext.response.statusCode = 201;
+            RestContext.response.responseBody =
+                Blob.valueOf(
+                    JSON.serializePretty(response)
                 );
-            }
-        } catch (JSONException ex) {
-            RestContext.response.statusCode = 400;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+
         } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating agent.')));
+
+            handleException(ex);
+
         }
+    }
+
+    /*
+     * =========================================================================
+     * Authentication
+     * =========================================================================
+     */
+
+    private static void authenticate() {
+
+        WebportalAPITokenAuthentication_v1
+            .parseAndValidateSecurityToken(
+                RestContext,
+                new Set<String>()
+            );
 
     }
 
-    private static ServiceContract buildServiceContract(BenefitPackage request){
-        ServiceContract contract = new ServiceContract();
-        contract.Product_Reference__c = request.product_reference;
-        contract.Product__c = getProductId(request.product_reference);
-        contract.StartDate = request.active_start_at;
-        contract.EndDate = request.active_end_at;
-        contract.Amount_of_Policies__c = request.amount_of_policies;
+    /*
+     * =========================================================================
+     * Request
+     * =========================================================================
+     */
 
-        if(request.status != null && !request.status.isEmpty()){
-            contract.Package_Status__c =
-                getPackageStatus(request.status[0]);
-        }
+    private static BenefitPackage parseRequest() {
 
-        if(request.affected_policy_range != null){
-            contract.Policy_Range_Start__c = request.affected_policy_range.external_number_start_at;
-            contract.Policy_Range_End__c = request.affected_policy_range.external_number_end_at;
-        }
-
-        return contract;
+        return null;
     }
+
+    /*
+     * =========================================================================
+     * Builders
+     * =========================================================================
+     */
+
+    private static ServiceContract buildServiceContract(
+        BenefitPackage request
+    ) {
+
+        return new ServiceContract();
+
+    }
+
+    private static List<ContractLineItem> buildContractLineItems(
+        ServiceContract contract,
+        BenefitPackage request
+    ) {
+
+        return new List<ContractLineItem>();
+
+    }
+
+    private static void saveLegalConsents(
+        ServiceContract contract,
+        BenefitPackage request
+    ) {
+
+    }
+
+    /*
+     * =========================================================================
+     * Error Handler
+     * =========================================================================
+     */
+
+    private static void handleException(
+        Exception ex
+    ) {
+
+    }
+
+    /*
+     * =========================================================================
+     * DTO
+     * =========================================================================
+     */
 
     public class BenefitPackage {
-        public List<String> status; //Package_Status__c - [ ACTIVE, AWAITING_AGENT_SIGNATURE, AWAITING_START, CANCELLED, DRAFT, EXPIRED ]
-        public String benefit_package_id; //benefit_package_id = ServiceContract.Id
-        public String product_reference; //Product_Reference__c
-        public Date active_start_at; //StartDate
-        public Date active_end_at; //EndDate
-        public Integer amount_of_policies; //Amount_of_Policies__c
-        public AffectedPolicyRange affected_policy_range;
-        public List<CoreBenefit> core_benefits;
-        public List<OptionalBenefit> optional_benefits;
-        public List<LegalConsentItem> legal_consents;
-    }
 
-    public class AffectedPolicyRange {
-        public String external_number_start_at; //Policy_Range_Start__c
-        public String external_number_end_at; //Policy_Range_End__c
-    }
-
-    public class CoreBenefit {
-        public String benefit_id; //Visa_External_Reference__c - Object: Benefit__c
-        public String name; //Name - Object: Benefit__c
-    }
-
-    //Analisar essa parte para identificar como será a captura dos benefícios opcionais
-    public class OptionalBenefit {
-        public String benefit_id; //Visa_External_Reference__c - Object: Benefit__c
-        public String name; //Name - Object: Benefit__c
-        public String description; //Benefit_Description__c - Object: Benefit__c
-    }
-
-    //ConsentValidation
-    public class LegalConsentItem {
-        public String code;
-        public String is_confirmed;
-        public String consented_at;
     }
 
     public class BenefitPackagePostResponse {
+
         public String benefit_package_id;
-    }
 
-    private enum Status {
-        DRAFT,
-        AWAITING_START,
-        ACTIVE,
-        CANCELLED,
-        EXPIRED
     }
 
 }
-
-
-Product_Reference__c = product_reference
-Product__c = [SELECT Id FROM Product2 WHERE ProductCode = :product_reference LIMIT 1].Id
-campo do registro de Service Contract que vai ser preenchido de uma query em Product__c
-é um campo de looku.
-| `status` da API | `Package_Status__c` |
-|---|---|
-| `DRAFT` | `Draft` |
-| `AWAITING_START` | `Awaiting Start` |
-| `ACTIVE` | `Active` |
-| `CANCELLED` | `Cancelled` |
-| `EXPIRED` | `Expired` |
-
-A tradução entre o *enum* da API (formato `SCREAMING_SNAKE`) e os rótulos da lista de opções reside em um único
-mapa privado na classe base da API. Nenhum código Apex compara um literal de status em mais de um local.
-
- Amount of Policies (`Amount_of_Policies__c`) | Number(9,0) | Agent-declared, minimum 
-
- SELECT Id,
-       Name,
-       (
-           SELECT Id,
-                  Quantity,
-                  UnitPrice
-           FROM ContractLineItems
-       )
-FROM ServiceContract
-WHERE Id = :contractId
-
-A API NÃO usa:
-Benefit__c.Id
-
-A API usa:
-Benefit__c.Visa_External_Reference__c
-
-Yaml
-/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages
-Creates a benefit package resource.
-
-Jump to definition
-Cf. summary
-
-Parameters
-Try it out
-No parameters
-
-Request body
-
-application/json
-Example Value
-Schema
-{
-  "product_reference": "I_C_BR",
-  "active_start_at": "2028-05-22",
-  "active_end_at": "2029-05-22",
-  "amount_of_policies": 12500,
-  "affected_policy_range": {
-    "external_number_start_at": "1234569890",
-    "external_number_end_at": "1234569890"
-  },
-  "core_benefits": [
-    {
-      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
-      "name": "International Emergency Medical Services"
-    }
-  ],
-  "optional_benefits": [
-    {
-      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
-      "name": "International Emergency Medical Services"
-    }
-  ],
-  "legal_consents": [
-    {
-      "code": "legal_consent_I_understand",
-      "is_confirmed": true,
-      "consented_at": "2019-03-22T10:59:00Z"
-    }
-  ]
-}
-Responses
-Code	Description	Links
-201	
-Benefit package created successfully.
-
-Media type
-
-application/json
-Controls Accept header.
-Example Value
-Schema
-{
-  "benefit_package_id": "b09aac28-7f63"
-}
-No links
-400	
-Bad Request.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "400",
-  "error": "Bad Request",
-  "error_description": "The input information received were not compliant with the endpoint specification."
-}
-No links
-401	
-Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "401",
-  "error": "Unauthorized",
-  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
-}
-No links
-403	
-Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "403",
-  "error": "Forbidden",
-  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
-}
-No links
-default	
-Default response format.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "500",
-  "error": "Internal Server Error"
-}
-No links
-Extensions
-BenefitPackage{
-status*	[...]
-benefit_package_id*	string
-maxLength: 18
-example: b09aac28-7f63
-readOnly: true
-Identifier of the benefit package.
-
-product_reference*	string
-maxLength: 10
-example: I_C_BR
-Short and readable concatenation of information related to the product.
-
-active_start_at*	string($date)
-example: 2028-05-22
-Date when the benefit package effect takes place.
-
-N.B. If the date is in the past, it will be set to today.
-
-ISO 8601 format (YYYY-MM-DD).
-
-active_end_at*	string($date)
-example: 2029-05-22
-Date when the benefit package ceases to have effect. ISO 8601 format (YYYY-MM-DD).
-
-amount_of_policies*	number($integer)
-minimum: 1
-example: 12500
-Estimated amount of policies that should be affected by the benefit package.
-
-affected_policy_range*	{
-description:	
-Range of policy numbers affected by the benefit package.
-
-external_number_start_at*	string
-maxLength: 10
-example: 1234569890
-Start of the policy number range.
-
-external_number_end_at*	string
-maxLength: 10
-example: 1234569890
-End of the policy number range.
-
- 
-}
-core_benefits*	[
-maxItems: 100
-minItems: 1
-CoreBenefit{Jump to definition
-benefit_id*	string
-example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
-maxLength: 80
-Identifier of the benefit.
-
-name*	string
-example: International Emergency Medical Services
-maxLength: 200
-Name of the benefit.
-
- 
-}]
-optional_benefits	[
-maxItems: 100
-minItems: 1
-OptionalBenefit{Jump to definition
-benefit_id*	[...]
-name*	[...]
-description*	string
-example: The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence.
-maxLength: 2000
-readOnly: true
-Description of the benefit.
-
- 
-}]
-legal_consents*	[
-maxItems: 5
-List of consents that apply to the benefit package.
-
-LegalConsentItem{Jump to definition
-code*	string
-maxLength: 50
-example: legal_consent_I_understand
-Code of the consent such as
-
-legal_consent_I_understand
-legal_consent_I_authorize
-...
-is_confirmed	boolean
-Indicates if the consent has been confirmed or not.
-
-consented_at	string($date-time)
-example: 2019-03-22T10:59:00Z
-Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
-
- 
-}]
- 
-}
-
-Preciso de uma classe limpa e funcional aplicando as regras descritas, seguindo boas praticas de programação e padrões presentes no meu projeto.
