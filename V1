@@ -1,11 +1,5 @@
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+@RestResource(urlMapping='/sales/enterprise')
 global with sharing class VOBPSalesBenefitPackages_V1 {
-
-    /*
-     * =========================================================================
-     * Constants
-     * =========================================================================
-     */
 
     private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
         'product_reference',
@@ -17,283 +11,165 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
         'legal_consents'
     };
 
-    private static final Map<String, String> PACKAGE_STATUS = new Map<String, String>{
-        'DRAFT' => 'Draft',
-        'AWAITING_START' => 'Awaiting Start',
-        'ACTIVE' => 'Active',
-        'CANCELLED' => 'Cancelled',
-        'EXPIRED' => 'Expired'
-    };
-
-    /*
-     * =========================================================================
-     * REST
-     * =========================================================================
-     */
-
     @HttpPost
     global static void doPost() {
         handlePost();
     }
 
-    /*
-     * =========================================================================
-     * Main Flow
-     * =========================================================================
-     */
-
     private static void handlePost() {
+        try{
+            RestContext.response.addHeader('Content-Type', 'application/json');
 
-        RestContext.response.addHeader(
-            'Content-Type',
-            'application/json'
-        );
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
 
-        try {
+                }
+            );
 
-            authenticate();
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
 
-            BenefitPackage request =
-                parseRequest();
+            BenefitPackage benefitPackageRequest = (BenefitPackage)JSON.deserializeStrict(requestBody, BenefitPackage.class);
 
-            ServiceContract contract =
-                buildServiceContract(request);
+            ServiceContract contract = buildServiceContract(benefitPackageRequest);
 
             insert contract;
 
-            List<ContractLineItem> contractLines =
-                buildContractLineItems(
-                    contract,
-                    request
+            //ContractLineItem
+            
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
                 );
-
-            if (!contractLines.isEmpty()) {
-                insert contractLines;
             }
+        } catch (JSONException ex) {
+            RestContext.response.statusCode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating agent.')));
+        }
 
-            saveLegalConsents(
+    }
+
+    private static Product__c getProductByReference(String productReference){
+        List<Product__c> products = [SELECT Id FROM Product__c WHERE Key__c = :productReference LIMIT 1];
+        if(products.isEmpty()){
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Product with reference ' + productReference + ' not found.');
+        }
+        return products[0];
+    }
+
+    private static ServiceContract buildServiceContract(BenefitPackage request){
+        ServiceContract contract = new ServiceContract();
+        contract.Product_Reference__c = request.product_reference;
+        contract.Product__c = getProductByReference(request.product_reference).Id;
+        contract.StartDate = request.active_start_at;
+        contract.EndDate = request.active_end_at;
+        contract.Amount_of_Policies__c = request.amount_of_policies;
+
+        if(request.affected_policy_range != null){
+            contract.Policy_Range_Start__c = request.affected_policy_range.external_number_start_at;
+            contract.Policy_Range_End__c = request.affected_policy_range.external_number_end_at;
+        }
+
+        populateLegalConsents(contract, request);
+
+        return contract;
+    }
+
+
+    private static void populateLegalConsents(ServiceContract contract, BenefitPackage request) {
+        if (request.legal_consents != null && !request.legal_consents.isEmpty()) {
+            
+            LegalConsentItem consent = request.legal_consents[0];
+
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
                 contract,
-                request
+                'Legal_Consent_Code__c',
+                consent.code,
+                false
             );
 
-            BenefitPackagePostResponse response =
-                new BenefitPackagePostResponse();
+            Boolean isConfirmed = false;
+            if (consent.is_confirmed != null) {
+                isConfirmed = 'true'.equalsIgnoreCase(consent.is_confirmed);
+            }
 
-            response.benefit_package_id =
-                contract.Id;
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+                contract,
+                'Legal_Consent_Confirmed__c',
+                isConfirmed,
+                false
+            );
 
-            RestContext.response.statusCode = 201;
-            RestContext.response.responseBody =
-                Blob.valueOf(
-                    JSON.serializePretty(response)
-                );
+            String consentedAt = consent.consented_at;
 
-        } catch (Exception ex) {
+            if (consentedAt != null && consentedAt.contains('T') && consentedAt.contains('Z')) {
+                consentedAt = consentedAt.replace('T', ' ');
+                consentedAt = consentedAt.replace('Z', '');
+            }
 
-            handleException(ex);
-
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+                contract,
+                'Legal_Consent_Date__c',
+                consentedAt != null ? Datetime.valueOfGmt(consentedAt) : null,
+                false
+            );        
         }
     }
 
-    /*
-     * =========================================================================
-     * Authentication
-     * =========================================================================
-     */
-
-    private static void authenticate() {
-
-        WebportalAPITokenAuthentication_v1
-            .parseAndValidateSecurityToken(
-                RestContext,
-                new Set<String>()
-            );
-
-    }
-
-    /*
-     * =========================================================================
-     * Request
-     * =========================================================================
-     */
-
-    private static BenefitPackage parseRequest() {
-
-        return null;
-    }
-
-    /*
-     * =========================================================================
-     * Builders
-     * =========================================================================
-     */
-
-    private static ServiceContract buildServiceContract(
-        BenefitPackage request
-    ) {
-
-        return new ServiceContract();
-
-    }
-
-    private static List<ContractLineItem> buildContractLineItems(
-        ServiceContract contract,
-        BenefitPackage request
-    ) {
-
-        return new List<ContractLineItem>();
-
-    }
-
-    private static void saveLegalConsents(
-        ServiceContract contract,
-        BenefitPackage request
-    ) {
-
-    }
-
-    /*
-     * =========================================================================
-     * Error Handler
-     * =========================================================================
-     */
-
-    private static void handleException(
-        Exception ex
-    ) {
-
-    }
-
-    /*
-     * =========================================================================
-     * DTO
-     * =========================================================================
-     */
-
     public class BenefitPackage {
+        public String benefit_package_id; 
+        public String product_reference; 
+        public Date active_start_at; 
+        public Date active_end_at; 
+        public Integer amount_of_policies;
+        public AffectedPolicyRange affected_policy_range;
+        public List<CoreBenefit> core_benefits;
+        public List<OptionalBenefit> optional_benefits;
+        public List<LegalConsentItem> legal_consents;
+    }
 
+    public class AffectedPolicyRange {
+        public String external_number_start_at;
+        public String external_number_end_at;
+    }
+
+    public class CoreBenefit {
+        public String benefit_id; 
+        public String name;
+    }
+
+    public class OptionalBenefit {
+        public String benefit_id;
+        public String name; 
+        public String description;
+    }
+
+    public class LegalConsentItem {
+        public String code;
+        public String is_confirmed;
+        public String consented_at;
     }
 
     public class BenefitPackagePostResponse {
-
         public String benefit_package_id;
-
     }
-
-}
------------------
-
-Tenho algumas regras para o LegalConsentItem para atender os padrões da org
-        if(request.legal_consents != null && request.legal_consents.size() > 0) {
-            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_code__c',         request.legal_consents[0].code, ignoreRequest);
-            caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_is_confirmed__c', request.legal_consents[0].is_confirmed != null ? request.legal_consents[0].is_confirmed                      : false, ignoreRequest);
-
-            if (request.legal_consents[0].consented_at != null && request.legal_consents[0].consented_at.contains('T') && request.legal_consents[0].consented_at.contains('Z')) {
-                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('T', ' ');
-                request.legal_consents[0].consented_at = request.legal_consents[0].consented_at.replace('Z', '');
-                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
-            } else {
-                caseRecord = (Case) WebportalApiUtility_v1.setSObjectField(caseRecord, 'Legal_consents_consented_at__c', request.legal_consents[0].consented_at != null ? Datetime.valueOfGmt(request.legal_consents[0].consented_at) : null, ignoreRequest);
-            }
-        }
-                request.legal_consents                 = new List<ConsentValidation>{new ConsentValidation(),new ConsentValidation(),new ConsentValidation()};
-                request.legal_consents[0].code         = 'legal_consent_I_understand';
-                request.legal_consents[0].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[0].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-                request.legal_consents[1].code         = 'legal_consent_I_authorize';
-                request.legal_consents[1].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[1].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-                request.legal_consents[2].code         = 'legal_consent_I_agree';
-                request.legal_consents[2].is_confirmed = claim.Legal_consents_is_confirmed__c;
-                request.legal_consents[2].consented_at = claim.Legal_consents_consented_at__c != null ? String.valueOf(claim.Legal_consents_consented_at__c) : null;
-em uma das minhas classes é tratado dessa maneira e deve segui assim para o Service contract ambém
-
-legal_consents*	[
-maxItems: 5
-List of consents that apply to the benefit package.
-
-LegalConsentItem{Jump to definition
-code*	string
-maxLength: 50
-example: legal_consent_I_understand
-Code of the consent such as
-
-legal_consent_I_understand
-legal_consent_I_authorize
-...
-is_confirmed	boolean
-Indicates if the consent has been confirmed or not.
-
-consented_at	string($date-time)
-example: 2019-03-22T10:59:00Z
-Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
-----------------------------
-
-
-No doPost() / doPatch() — Gravação no banco (POST/PATCH)
-O método createCase() persiste apenas o primeiro elemento da lista (index [0]):
-if(request.legal_consents != null && request.legal_consents.size() > 0) {
-    caseRecord.Legal_consents_code__c         = request.legal_consents[0].code;
-    caseRecord.Legal_consents_is_confirmed__c = request.legal_consents[0].is_confirmed ?? false;
-    caseRecord.Legal_consents_consented_at__c = request.legal_consents[0].consented_at != null
-        ? Datetime.valueOfGmt(...)
-        : null;
-}
-O campo consented_at tem tratamento especial para normalizar o formato ISO 8601:
-// "2024-01-01T10:00:00Z" → remove 'T' e 'Z' → "2024-01-01 10:00:00"
-if (consented_at.contains('T') && consented_at.contains('Z')) {
-    consented_at = consented_at.replace('T', ' ').replace('Z', '');
-}
-// "2024-01-01T10:00:00Z" → remove 'T' e 'Z' → "2024-01-01 10:00:00"
-if (consented_at.contains('T') && consented_at.contains('Z')) {
-    consented_at = consented_at.replace('T', ' ').replace('Z', '');
-}
-POST/PATCH → valida lista completa → grava apenas [0] no Case (3 campos)
-
-
----------------------
-
-private static void populateLegalConsents(
-    ServiceContract contract,
-    BenefitPackage request,
-    Boolean ignoreRequest
-) {
-
-    if (request.legal_consents == null ||
-        request.legal_consents.isEmpty()) {
-        return;
-    }
-
-    LegalConsentItem consent = request.legal_consents[0];
-
-    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-        contract,
-        'Legal_consents_code__c',
-        consent.code,
-        ignoreRequest
-    );
-
-    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-        contract,
-        'Legal_consents_is_confirmed__c',
-        consent.is_confirmed != null ? consent.is_confirmed : false,
-        ignoreRequest
-    );
-
-    String consentedAt = consent.consented_at;
-
-    if (consentedAt != null &&
-        consentedAt.contains('T') &&
-        consentedAt.contains('Z')) {
-
-        consentedAt = consentedAt.replace('T', ' ');
-        consentedAt = consentedAt.replace('Z', '');
-    }
-
-    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-        contract,
-        'Legal_consents_consented_at__c',
-        consentedAt != null ? Datetime.valueOfGmt(consentedAt) : null,
-        ignoreRequest
-    );
 }
