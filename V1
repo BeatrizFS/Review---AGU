@@ -249,3 +249,51 @@ if (consented_at.contains('T') && consented_at.contains('Z')) {
     consented_at = consented_at.replace('T', ' ').replace('Z', '');
 }
 POST/PATCH → valida lista completa → grava apenas [0] no Case (3 campos)
+
+
+---------------------
+
+private static void populateLegalConsents(
+    ServiceContract contract,
+    BenefitPackage request,
+    Boolean ignoreRequest
+) {
+
+    if (request.legal_consents == null ||
+        request.legal_consents.isEmpty()) {
+        return;
+    }
+
+    LegalConsentItem consent = request.legal_consents[0];
+
+    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+        contract,
+        'Legal_consents_code__c',
+        consent.code,
+        ignoreRequest
+    );
+
+    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+        contract,
+        'Legal_consents_is_confirmed__c',
+        consent.is_confirmed != null ? consent.is_confirmed : false,
+        ignoreRequest
+    );
+
+    String consentedAt = consent.consented_at;
+
+    if (consentedAt != null &&
+        consentedAt.contains('T') &&
+        consentedAt.contains('Z')) {
+
+        consentedAt = consentedAt.replace('T', ' ');
+        consentedAt = consentedAt.replace('Z', '');
+    }
+
+    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+        contract,
+        'Legal_consents_consented_at__c',
+        consentedAt != null ? Datetime.valueOfGmt(consentedAt) : null,
+        ignoreRequest
+    );
+}
