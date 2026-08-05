@@ -27,3 +27,11 @@ private static ServiceContract buildServiceContract(BenefitPackage request){
 
     return contract;
 }
+
+private static final Map<String, String> PACKAGE_STATUS_MAP = new Map<String, String>{
+    'DRAFT' => 'Draft',
+    'AWAITING_START' => 'Awaiting Start',
+    'ACTIVE' => 'Active',
+    'CANCELLED' => 'Cancelled',
+    'EXPIRED' => 'Expired'
+};
