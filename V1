@@ -1,144 +1,69 @@
-00:54:14.1 (62417389)|METHOD_ENTRY|[733]|01p0N00000ASuS7|WebportalApiUtility_v1.validateJSONRequiredFields(Map<String,ANY>, Set<String>, String)
-00:54:14.1 (62423016)|VARIABLE_SCOPE_BEGIN|[742]|level|Map<String,ANY>|true|false
-00:54:14.1 (62431256)|VARIABLE_ASSIGNMENT|[742]|level|{"first_name":"John","last_name":"Doe","email":"jonathan.doe@mail.co (1 more) ...","communication_subscriptions":{"email":true}}|0x19b4304c
-00:54:14.1 (62435554)|VARIABLE_SCOPE_BEGIN|[742]|requiredFields|Set<String>|true|false
-00:54:14.1 (62449308)|VARIABLE_ASSIGNMENT|[742]|requiredFields|["first_name"]|0x307d5618
-00:54:14.1 (62452991)|VARIABLE_SCOPE_BEGIN|[742]|message|String|false|false
-00:54:14.1 (62457046)|VARIABLE_ASSIGNMENT|[742]|message|""
-00:54:14.1 (62462640)|HEAP_ALLOCATE|[743]|Bytes:5
-00:54:14.1 (62465275)|STATEMENT_EXECUTE|[742]
-00:54:14.1 (62466548)|STATEMENT_EXECUTE|[743]
-00:54:14.1 (62468402)|HEAP_ALLOCATE|[743]|Bytes:20
-00:54:14.1 (62490043)|HEAP_ALLOCATE|[743]|Bytes:12
-00:54:14.1 (62497611)|HEAP_ALLOCATE|[743]|Bytes:32
-00:54:14.1 (62507911)|USER_DEBUG|[743]|DEBUG|Required Fields >>> {first_name}
-00:54:14.1 (62522455)|HEAP_ALLOCATE|[744]|Bytes:5
-00:54:14.1 (62529588)|VARIABLE_SCOPE_BEGIN|[744]|requiredField|String|false|false
-00:54:14.1 (62534736)|VARIABLE_ASSIGNMENT|[744]|requiredField|"first_name"
-00:54:14.1 (62537416)|STATEMENT_EXECUTE|[744]
-00:54:14.1 (62538568)|STATEMENT_EXECUTE|[745]
-00:54:14.1 (62540078)|HEAP_ALLOCATE|[745]|Bytes:19
-00:54:14.1 (62542922)|HEAP_ALLOCATE|[745]|Bytes:29
-00:54:14.1 (62552421)|USER_DEBUG|[745]|DEBUG|Required Field >>> first_name
-00:54:14.1 (62565567)|STATEMENT_EXECUTE|[746]
-00:54:14.1 (62566696)|STATEMENT_EXECUTE|[747]
-00:54:14.1 (62585229)|HEAP_ALLOCATE|[747]|Bytes:10
-00:54:14.1 (62588205)|HEAP_ALLOCATE|[747]|Bytes:8
-00:54:14.1 (62593588)|VARIABLE_SCOPE_BEGIN|[747]|requiredFieldSplit|List<String>|true|false
-00:54:14.1 (62608033)|HEAP_ALLOCATE|[EXTERNAL]|Bytes:8
-00:54:14.1 (62614577)|VARIABLE_ASSIGNMENT|[747]|requiredFieldSplit|["first_name"]|0x5d349e45
-00:54:14.1 (62617143)|STATEMENT_EXECUTE|[748]
-00:54:14.1 (62628518)|USER_DEBUG|[748]|DEBUG|(first_name)
-00:54:14.1 (62632543)|STATEMENT_EXECUTE|[749]
-00:54:14.1 (62635456)|VARIABLE_SCOPE_BEGIN|[749]|isListObject|Boolean|false|false
-00:54:14.1 (62639128)|HEAP_ALLOCATE|[749]|Bytes:5
-00:54:14.1 (62642323)|VARIABLE_ASSIGNMENT|[749]|isListObject|false
-00:54:14.1 (62644364)|STATEMENT_EXECUTE|[750]
-00:54:14.1 (62650556)|VARIABLE_SCOPE_BEGIN|[750]|listObject|List<ANY>|true|false
-00:54:14.1 (62655179)|VARIABLE_ASSIGNMENT|[750]|listObject|null|
-00:54:14.1 (62662743)|HEAP_ALLOCATE|[751]|Bytes:10
-00:54:14.1 (62677605)|STATEMENT_EXECUTE|[751]
-00:54:14.1 (62678581)|STATEMENT_EXECUTE|[752]
-00:54:14.1 (62679400)|STATEMENT_EXECUTE|[752]
-00:54:14.1 (62680191)|STATEMENT_EXECUTE|[753]
-00:54:14.1 (62682223)|HEAP_ALLOCATE|[753]|Bytes:10
-00:54:14.1 (62786029)|HEAP_ALLOCATE|[753]|Bytes:60
-00:54:14.1 (62831696)|VARIABLE_SCOPE_BEGIN|[755]|e|Exception|true|false
-00:54:14.1 (62921264)|VARIABLE_ASSIGNMENT|[755]|e|"common.apex.runtime.impl.ExecutionException: Invalid conversion from runtime type String to List<ANY>"|0x723ce6d
-00:54:14.1 (62924983)|STATEMENT_EXECUTE|[755]
-00:54:14.1 (62926999)|STATEMENT_EXECUTE|[758]
-00:54:14.1 (62928576)|HEAP_ALLOCATE|[758]|Bytes:23
-00:54:14.1 (62949790)|HEAP_ALLOCATE|[758]|Bytes:103
-00:54:14.1 (62956629)|HEAP_ALLOCATE|[758]|Bytes:126
-00:54:14.1 (62961410)|USER_DEBUG|[758]|DEBUG|Current JSON Level >>> {communication_subscriptions={email=true}, email=jonathan.doe@mail.com, first_name=John, last_name=Doe}
-00:54:14.1 (62965986)|STATEMENT_EXECUTE|[759]
-00:54:14.1 (62973807)|HEAP_ALLOCATE|[759]|Bytes:12
-00:54:14.1 (62978684)|HEAP_ALLOCATE|[759]|Bytes:31
-00:54:14.1 (62981851)|USER_DEBUG|[759]|DEBUG|Required Field >>> (first_name)
-00:54:14.1 (62996336)|STATEMENT_EXECUTE|[760]
-00:54:14.1 (62997594)|STATEMENT_EXECUTE|[761]
-00:54:14.1 (62998805)|HEAP_ALLOCATE|[761]|Bytes:16
-00:54:14.1 (63002254)|HEAP_ALLOCATE|[761]|Bytes:10
-00:54:14.1 (63015878)|HEAP_ALLOCATE|[761]|Bytes:4
-00:54:14.1 (63020596)|HEAP_ALLOCATE|[761]|Bytes:20
-00:54:14.1 (63024039)|USER_DEBUG|[761]|DEBUG|Field Value >>> John
-00:54:14.1 (63028304)|HEAP_ALLOCATE|[762]|Bytes:10
-00:54:14.1 (63040492)|HEAP_ALLOCATE|[762]|Bytes:10
-00:54:14.1 (63046319)|STATEMENT_EXECUTE|[762]
-00:54:14.1 (63053316)|HEAP_ALLOCATE|[744]|Bytes:5
-00:54:14.1 (63060732)|VARIABLE_ASSIGNMENT|[744]|requiredField|null
-00:54:14.1 (63063744)|STATEMENT_EXECUTE|[789]
-00:54:14.1 (63072552)|METHOD_EXIT|[733]|01p0N00000ASuS7|WebportalApiUtility_v1.validateJSONRequiredFields(Map<String,ANY>, Set<String>, String)
-00:54:14.1 (63077686)|VARIABLE_ASSIGNMENT|[733]|message|""
-00:54:14.1 (78677379)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x7903668e
-00:54:14.1 (78687729)|VARIABLE_ASSIGNMENT|[EXTERNAL]|value|400
-00:54:14.1 (78690614)|STATEMENT_EXECUTE|[445]
-00:54:14.1 (78691629)|STATEMENT_EXECUTE|[445]
-00:54:14.1 (78693602)|HEAP_ALLOCATE|[445]|Bytes:4
-00:54:14.1 (78773910)|VARIABLE_ASSIGNMENT|[445]|this.status_code|400|0x48906722
-00:54:14.1 (78807275)|STATEMENT_EXECUTE|[439]
-00:54:14.1 (78848014)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x6d6bd756
-00:54:14.1 (78855161)|VARIABLE_ASSIGNMENT|[EXTERNAL]|value|"Bad Request"
-00:54:14.1 (78858091)|STATEMENT_EXECUTE|[450]
-00:54:14.1 (78859211)|STATEMENT_EXECUTE|[450]
-00:54:14.1 (78864928)|VARIABLE_ASSIGNMENT|[450]|this.error|"Bad Request"|0x48906722
-00:54:14.1 (78869722)|STATEMENT_EXECUTE|[440]
-00:54:14.1 (78898693)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x445c34c1
-00:54:14.1 (78905569)|VARIABLE_ASSIGNMENT|[EXTERNAL]|value|"The input informatio (62 more) ..."
-00:54:14.1 (78908061)|STATEMENT_EXECUTE|[455]
-00:54:14.1 (78908920)|STATEMENT_EXECUTE|[455]
-00:54:14.1 (78972539)|VARIABLE_ASSIGNMENT|[455]|this.error_Description|"The input informatio (62 more) ..."|0x48906722
-00:54:14.1 (78989235)|CONSTRUCTOR_EXIT|[50]|01p0N00000ASuS7|<init>(Integer,String,String)|WebportalApiUtility_v1.RequestAPIException
-00:54:14.1 (79001066)|EXCEPTION_THROWN|[50]|WebportalApiUtility_v1.RequestAPIException: Script-thrown exception
-00:54:14.1 (79026109)|VARIABLE_SCOPE_BEGIN|[77]|ex|WebportalApiUtility_v1.RequestAPIException|true|false
-00:54:14.1 (79053605)|VARIABLE_ASSIGNMENT|[77]|ex|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x5f8caed2
-00:54:14.1 (79059324)|STATEMENT_EXECUTE|[77]
-00:54:14.1 (79060324)|STATEMENT_EXECUTE|[78]
-00:54:14.1 (79088520)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x14f3181f
-00:54:14.1 (79106276)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79107072)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79162648)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x31accc7c
-00:54:14.1 (79165895)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79166605)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79191880)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0xbec0ea5
-00:54:14.1 (79194779)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79195463)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79198774)|STATEMENT_EXECUTE|[83]
-00:54:14.1 (79199789)|STATEMENT_EXECUTE|[84]
-00:54:14.1 (79354591)|HEAP_ALLOCATE|[86]|Bytes:4
-00:54:14.1 (79369081)|HEAP_ALLOCATE|[86]|Bytes:16
-00:54:14.1 (79399676)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x17067a59
-00:54:14.1 (79403171)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79403931)|STATEMENT_EXECUTE|[444]
-00:54:14.1 (79432608)|HEAP_ALLOCATE|[87]|Bytes:3
-00:54:14.1 (79474209)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x4ca14b71
-00:54:14.1 (79477716)|STATEMENT_EXECUTE|[449]
-00:54:14.1 (79478452)|STATEMENT_EXECUTE|[449]
-00:54:14.1 (79503921)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException: Script-thrown exception"|0x3a38f77
-00:54:14.1 (79506961)|STATEMENT_EXECUTE|[454]
-00:54:14.1 (79507667)|STATEMENT_EXECUTE|[454]
-00:54:14.1 (79524391)|CONSTRUCTOR_ENTRY|[86]|01p0N00000ASuS7|<init>(String,String,String)|WebportalApiUtility_v1.ErrorMessage
-00:54:14.1 (79537542)|VARIABLE_SCOPE_BEGIN|[1765]|this|WebportalApiUtility_v1.ErrorMessage|true|false
-00:54:14.1 (79586593)|VARIABLE_ASSIGNMENT|[1765]|this|{}|0x132ad4de
-00:54:14.1 (79591412)|VARIABLE_SCOPE_BEGIN|[1765]|statusCode|String|false|false
-00:54:14.1 (79596343)|VARIABLE_ASSIGNMENT|[1765]|statusCode|"400"
-00:54:14.1 (79599304)|VARIABLE_SCOPE_BEGIN|[1765]|error|String|false|false
-00:54:14.1 (79603252)|VARIABLE_ASSIGNMENT|[1765]|error|"Bad Request"
-00:54:14.1 (79606076)|VARIABLE_SCOPE_BEGIN|[1765]|errorDescription|String|false|false
-00:54:14.1 (79610759)|VARIABLE_ASSIGNMENT|[1765]|errorDescription|"The input informatio (62 more) ..."
-00:54:14.1 (79613657)|STATEMENT_EXECUTE|[1760]
-00:54:14.1 (79614429)|STATEMENT_EXECUTE|[1761]
-00:54:14.1 (79615184)|STATEMENT_EXECUTE|[1762]
-00:54:14.1 (79615829)|STATEMENT_EXECUTE|[1763]
-00:54:14.1 (79626839)|STATEMENT_EXECUTE|[1765]
-00:54:14.1 (79627570)|STATEMENT_EXECUTE|[1766]
-00:54:14.1 (79634959)|VARIABLE_ASSIGNMENT|[1766]|this.status_code|"400"|0x132ad4de
-00:54:14.1 (79637432)|STATEMENT_EXECUTE|[1767]
-00:54:14.1 (79640991)|VARIABLE_ASSIGNMENT|[1767]|this.error|"Bad Request"|0x132ad4de
-00:54:14.1 (79643293)|STATEMENT_EXECUTE|[1768]
-00:54:14.1 (79646592)|VARIABLE_ASSIGNMENT|[1768]|this.error_description|"The input informatio (62 more) ..."|0x132ad4de
-00:54:14.1 (79654834)|CONSTRUCTOR_EXIT|[86]|01p0N00000ASuS7|<init>(String,String,String)|WebportalApiUtility_v1.ErrorMessage
-00:54:14.1 (79664549)|METHOD_ENTRY|[85]||System.JSON.serializePretty(Object)
-00:54:14.1 (79804305)|METHOD_EXIT|[85]||System.JSON.serializePretty(Object)
-00:54:14.1 (79851879)|HEAP_ALLOCATE|[84]|Bytes:4
-00:54:14.1 (79887800)|METHOD_EXIT|[12]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.handlePost()
+            AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
+
+            validateRequiredPostFields(requestBody, agentRequest);
+
+            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (bankRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
+            }
+
+            Account bank = bankRecords[0];
+
+            Contact newAgent = new Contact(
+                AccountId = bank.Id,
+                FirstName = agentRequest.first_name,
+                LastName = agentRequest.last_name,
+                Email = agentRequest.email
+            );
+            insert newAgent;
+
+            if(agentRequest.communication_subscriptions != null && agentRequest.communication_subscriptions.email != null && agentRequest.communication_subscriptions.email) {
+                createCommunicationSubscriptions(bank.Id, newAgent.Id, 'Email', null);
+            }
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(newAgent)));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+        } catch (JSONException ex) {
+            RestContext.response.statusCode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating agent.')));
+        }
+    }
+
+
+private static AgentData buildAgentResponse(Contact agent) {
+        AgentData response = new AgentData();
+        response.first_name = agent.FirstName;
+        response.last_name = agent.LastName;
+        response.email = agent.Email;
+
+        List<Communication_Subscription__c> subscriptions = [SELECT Id, Channel__c FROM Communication_Subscription__c WHERE Contact__c = :agent.Id AND Channel__c = 'Email' LIMIT 1];
+        if (!subscriptions.isEmpty()) {
+            response.communication_subscriptions = new CommunicationSubscriptions();
+            response.communication_subscriptions.email = true;
+        }
+
+        return response;
+    }
