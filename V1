@@ -1,7 +1,7 @@
-@RestResource(urlMapping='/sales/enterprise/transversal/')
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/banks/*/agents/*')
 global with sharing class WebportalSalesBanksAgents_VEXP {
 
-    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String> {
+    private static final Set<String> postRequiredFields = new Set<String> {
         'first_name',
         'last_name',
         'email'
@@ -17,11 +17,6 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
         handleGet();
     }
 
-    @HttpPatch
-    global static void doPatch(){
-        handlePatch();
-    }
-
     private static void handlePost() {
         try {
             RestContext.response.addHeader('Content-Type', 'application/json');
@@ -29,7 +24,8 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
             WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
                 RestContext.request,
                 new Set<String>{
-
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only',
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
                 }
             );
 
@@ -46,21 +42,15 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
 
             AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
 
-            //validateRequiredPostFields(requestBody, agentRequest);
+            validateRequiredPostFields(requestBody, agentRequest);
 
-            WebportalApiUtility_v1.validateRequestRequiredFields(requestBody, POST_REQUIRED_FIELDS);           
-
-            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Bank'LIMIT 1];
 
             if (bankRecords.isEmpty()) {
                 throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
             }
 
             Account bank = bankRecords[0];
-
-            // TODO: When the Agent ID becomes available in the access token,
-            // validate that no Contact already exists with the same Agent ID
-            // before creating a new agent.
 
             Contact newAgent = new Contact(
                 AccountId = bank.Id,
@@ -69,13 +59,6 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 Email = agentRequest.email
             );
             insert newAgent;
-
-            if(agentRequest.communication_subscriptions != null && agentRequest.communication_subscriptions.email == true) {
-                insert new Communication_Subscription__c(
-                    Contact__c = newAgent.Id,
-                    Channel__c = 'EMAIL'
-                );
-            }
 
             RestContext.response.statusCode = 200;
             RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(newAgent)));
@@ -127,7 +110,7 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
             }
 
-            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];            
+            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Bank' LIMIT 1];
 
             if (agentRecords.isEmpty()) {
                 throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
@@ -157,6 +140,272 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 );
             }
 
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
+        }
+    }
+
+    private static AgentData buildAgentResponse(Contact agent) {
+        AgentData response = new AgentData();
+        response.first_name = agent.FirstName;
+        response.last_name = agent.LastName;
+        response.email = agent.Email;
+
+        return response;
+    }
+
+    private static void validateRequiredPostFields(String requestBody, AgentData agentRequest) {
+        String errorRequiredFieldsMessage = WebportalApiUtility_v1.validateJSONRequiredFields(requestBody, postRequiredFields);
+
+        if(String.isNotBlank(errorRequiredFieldsMessage)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field ' + errorRequiredFieldsMessage + ' is required');            
+        } else if(String.isBlank(agentRequest.first_name)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field first_name must not be empty');
+        } else if(String.isBlank(agentRequest.last_name)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field last_name must not be empty');
+        } else if(String.isBlank(agentRequest.email)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field email must not be empty');
+        }
+    }
+
+    public class AgentData {
+        public String first_name {
+            get {
+                return first_name;
+            }
+            set {
+                WebportalApiUtility_v1.validateMaxLength(value, 40, 'first_name');
+                first_name = value;
+            }
+        }
+
+        public String last_name {
+            get {
+                return last_name;
+            }
+            set {
+                WebportalApiUtility_v1.validateMaxLength(value, 80, 'last_name');
+                last_name = value;
+            }
+        }
+        public String email;
+    }    
+}
+
+=====================================
+=====================================
+Base de conhecimento
+@RestResource(urlMapping='/specific')
+global with sharing class WebportalContactUsRequest_VEXP {
+    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String> {
+        'personal_data',
+        'personal_data.first_name',
+        'personal_data.last_name',
+        'personal_data.email',
+        'personal_data.country',
+        'product_criteria',
+        'product_criteria.credit_card_token',
+        'product_criteria.bank_identification_number',
+        'request',
+        'request.category',
+        'request.description'
+    };
+
+    @HttpPost
+    global static void doPost() {
+        handlePost();
+    }
+
+    global static void handlePost() {
+        Savepoint savePoint;
+
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            Boolean isAcgToken = false;
+            String clientId = '';
+            String cn = '';
+
+            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
+                WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                    RestContext.Request, new Set<String> {
+
+                    }
+                );
+
+            WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig =
+                WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
+
+            if (accessTokenData.customData != null) {
+                isAcgToken = true;
+                clientId = accessTokenData.aud;
+                cn = accessTokenData.customData.cn;
+            }
+
+            if (!isAcgToken) {
+                try {
+                    WebportalAPITokenAuthentication_v1.AccessTokenClientCredentials accessTokenDataCC =
+                        WebportalAPITokenAuthentication_v1.parseAndValidateClientCredentialToken(
+                            RestContext.Request,
+                            new Set<String> {
+
+                            }
+                        );
+
+                    clientId = accessTokenDataCC.azp;
+                } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        ex.status_code,
+                        ex.error,
+                        ex.error_description
+                    );
+                }
+            }
+
+            String requestBody = RestContext.request.requestBody.toString();
+            if (requestBody.contains('encrypted_data')) {
+                requestBody =
+                    WebportalApiUtility_v1.decryptRequestBody(clientId, RestContext.request.requestBody.toString());
+            }
+
+            requestBody = requestBody.trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
+            WebportalApiUtility_v1.validateRequestRequiredFields(requestBody, POST_REQUIRED_FIELDS);
+
+            ContactUsRequestBody ctuRequestBody = (ContactUsRequestBody) JSON.deserializeStrict(
+                WebportalApiUtility_v1.parseJSONBodyRequest(
+                    WebportalApiUtility_v1.formatJSON(requestBody)
+                ),
+                ContactUsRequestBody.class
+            );
+
+            Case newCase = new Case();
+            newCase.RecordTypeId = Schema.Case.SObjectType.getDescribe()
+                .getRecordTypeInfosByDeveloperName()
+                .get('CTU')
+                .getRecordTypeId();
+
+            if (isAcgToken) {
+                Account customer = validateAcgRequestBody(ctuRequestBody, cn);
+                newCase.AccountId = customer.Id;
+                newCase.ContactId = customer.PersonContactId;
+                newCase.MN_Account_BIN__c = customer.MN_Account_BIN__r[0].Id;
+                newCase.BIN__c = customer.MN_Account_BIN__r[0].BIN__c;
+            } else {
+                validateCcRequestBody(ctuRequestBody);
+                newCase.BIN__c =
+                    WebportalApiUtility_v1.getBinV2(ctuRequestBody.product_criteria.bank_identification_number).Id;
+            }
+
+            newCase.Origin = getOrigin(clientId);
+
+            newCase.AffectedPersonFirtName__c = ctuRequestBody.personal_data.first_name;
+            newCase.AffectedPersonLastName__c = ctuRequestBody.personal_data.last_name;
+            newCase.SuppliedEmail = ctuRequestBody.personal_data.email;
+            newCase.Country__c = ctuRequestBody.personal_data.country;
+            newCase.Communication_Language__c = getCommunicationLanguage();
+
+            newCase.CTU_Subject__c = ctuRequestBody.request.category.name();
+            newCase.Description__c = ctuRequestBody.request.description;
+            
+            if (ctuRequestBody.personal_data.phone != null && String.isNotBlank(ctuRequestBody.personal_data.phone.numberValue)) {
+                String prefix = String.isNotBlank(ctuRequestBody.personal_data.phone.international_prefix) 
+                    ? ctuRequestBody.personal_data.phone.international_prefix 
+                    : '';
+                newCase.ContactPhone_number__c = prefix + ctuRequestBody.personal_data.phone.numberValue;
+            }
+
+            List<ContentVersion> contentVersions = new List<ContentVersion>();
+            if (!ctuRequestBody.request.documents.isEmpty()){
+                ModelUtility.validateDocuments(ctuRequestBody.request.documents);
+
+                for (ModelUtility.DocumentItem document : ctuRequestBody.request.documents) {
+                    ContentVersion contentVersion = new ContentVersion();
+                    contentVersion.Title = document.document_name;
+                    contentVersion.PathOnClient = document.document_name;
+                    contentVersion.Is_Main__c = true;
+                    contentVersion.VersionData =
+                        CmxService.getInstance().getAttachmentFromCmx(document.external_attachment_id);
+                    contentVersions.add(contentVersion);
+                }
+            }
+
+            savePoint = Database.setSavepoint();
+
+            insert contentVersions;
+            insert newCase;
+
+            List<ContentDocumentLink> contentDocumentLinks = new List<ContentDocumentLink>();
+            if(!contentVersions.isEmpty()){
+                for (ContentDocument contentDocument : [
+                    SELECT Id
+                    FROM ContentDocument
+                    WHERE LatestPublishedVersionId IN :contentVersions
+                ]) {
+                    ContentDocumentLink contentDocumentLink = new ContentDocumentLink();
+                    contentDocumentLink.ContentDocumentId = contentDocument.Id;
+                    contentDocumentLink.LinkedEntityId = newCase.Id;
+                    contentDocumentLinks.add(contentDocumentLink);
+                }
+            }
+
+            insert contentDocumentLinks;
+
+            sendCreationEmail(isAcgToken, newCase.Id);
+            notifyCtuQueueAsync(newCase.Id);
+
+            ContactUsResponse responseBodyObj = new ContactUsResponse();
+            responseBodyObj.contactUsRequest_id = newCase.Id;
+
+            RestContext.response.statuscode = 201;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(responseBodyObj, true));
+        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statuscode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error, ex.error_description),
+                        true
+                    )
+                );
+        } catch(JSONException ex) {
+            RestContext.response.statuscode = 400;
+            if (String.isNotBlank(ex.getMessage().substringAfterLast('.'))) {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            '400',
+                            'Bad Request',
+                            'Invalid request body. Field not acceptable: ' + ex.getMessage().substringAfterLast('.')
+                        )
+                    )
+                );
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            '400',
+                            'Bad Request',
+                            'Invalid request body'
+                        )
+                    )
+                );
+            }
+        } catch(StringException ex) {
+			RestContext.response.statuscode = 422;
+			RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '422',
+                        'Unprocessable Entity',
+                        'The linked_entity_identifier provided is not a valid Salesforce ID.')
+                    )
+                );
 		} catch(DMLException ex) {
             Database.rollback(savePoint);
             System.debug(LoggingLevel.ERROR, 'DMLExpcetion: ' + ex.getMessage());
@@ -186,112 +435,199 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
         }
     }
 
-    private static void handlePatch() {
-        try {
-            RestContext.response.addHeader('Content-Type', 'application/json');
+    @TestVisible
+    private static Account validateAcgRequestBody(ContactUsRequestBody body, String cn) {
+        String linkedEntityId = body.request.linked_entity_identifier;
 
-            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
-                WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                    RestContext.request,
-                    new Set<String>{
+        Boolean isIdentifierRequired = (
+            body.request.category == Category.CERTIFICATES || 
+            body.request.category == Category.EMERGENCY_MEDICAL_ASSISTANCE
+        );
 
-                    }
-                );
-
-            String requestUri = RestContext.request.requestURI;
-            String bankId = requestUri.substringBetween('/banks/', '/agents/');
-            String agentId = requestUri.substringAfter('/agents/');
-
-            if (String.isBlank(bankId) || String.isBlank(agentId)) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
-            }
-
-            //Mapear campo ou objeto usado para setar a comunicação
-            List<Contact> agentRecords = [SELECT Id FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
-
-            if (agentRecords.isEmpty()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
-            }
-
-            Contact agentRecord = agentRecords[0];
-
-            String requestBody = RestContext.request.requestBody.toString().trim();
-            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
-            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
-
-            AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
-            
-            if (String.isNotBlank(agentRequest.first_name)) {
-                agentRecord.FirstName = agentRequest.first_name;
-            }
-
-            update agentRecord;
-
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agentRecord)));
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-
-            if (ex.status_code == 401) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
-            } else if (ex.status_code == 403) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
-            } else {
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage(
-                            String.valueOf(ex.status_code),
-                            ex.error,
-                            ex.error_description
-                        )
-                    )
-                );
-            }
+        if (isIdentifierRequired && String.isBlank(body.request.linked_entity_identifier)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'The linked_entity_identifier field is mandatory for this category.'
+            );
         }
-    }
 
-    private static AgentData buildAgentResponse(Contact agent) {
-        AgentData response = new AgentData();
-        response.first_name = agent.FirstName;
-        response.last_name = agent.LastName;
-        response.email = agent.Email;
-
-        List<Communication_Subscription__c> subscriptions = [
-            SELECT Id, Email__c 
-            FROM Communication_Subscription__c 
-            WHERE Contact__c = :agent.Id AND Channel__c = 'EMAIL'
+        List<Account> customer = [
+            SELECT Id, PersonContactId,
+                (SELECT Id FROM Cases WHERE Id = :linkedEntityId LIMIT 1),
+                (SELECT Id FROM Certificates__r WHERE Id = :linkedEntityId LIMIT 1),
+                (SELECT Id FROM Trip_Assistances__r WHERE Id = :linkedEntityId LIMIT 1),
+                (
+                    SELECT Id, BIN__c
+                    FROM MN_Account_BIN__r
+                    WHERE Credit_Card_Token__c = :body.product_criteria.credit_card_token
+                        OR BIN__r.BIN_Number__c = :body.product_criteria.bank_identification_number
+                    LIMIT 1
+                )
+            FROM Account
+            WHERE Customer_Identifier__c = :cn
+                AND Inactive__c = false
+            ORDER BY LastModifiedDate DESC
+            LIMIT 1
         ];
 
-        if (!subscriptions.isEmpty()) {
-            response.communication_subscriptions = new CommunicationSubscriptions();
-            response.communication_subscriptions.email = true;
+        if (customer.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                'Not Found',
+                'Resource not found: customer'
+            );
+        } else if (customer[0].MN_Account_BIN__r.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                'Not Found',
+                'Resource not found: product_criteria.credit_card_token'
+            );
         }
 
-        return response;
+
+        if (String.isNotBlank(linkedEntityId)) {
+            Schema.SObjectType sType = Id.valueOf(linkedEntityId).getSObjectType();
+
+            if (sType != Case.sObjectType && sType != Certificates__c.sObjectType && sType != Trip_Assistance__c.sObjectType) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    'Bad Request',
+                    'The linked_entity_identifier must be a valid Case, Certificate or Trip Assistance ID.'
+                );
+            }
+
+            Boolean notFound =
+                (sType == Case.sObjectType && customer[0].Cases.isEmpty()) ||
+                (sType == Certificates__c.sObjectType && customer[0].Certificates__r.isEmpty()) ||
+                (sType == Trip_Assistance__c.sObjectType && customer[0].Trip_Assistances__r.isEmpty());
+
+            if (notFound) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    404,
+                    'Not Found',
+                    'Resource not found: linked_entity_identifier'
+                );
+            }
+        }
+
+        if (String.isBlank(body.product_criteria.credit_card_token) && String.isBlank(body.product_criteria.bank_identification_number)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'Invalid request body. Mandatory field: product_criteria'
+            );
+        }
+
+        return customer[0];
     }
 
-    public class AgentData {
+    @TestVisible
+    private static void validateCcRequestBody(ContactUsRequestBody body) {
+
+        Boolean isIdentifierRequired = (
+            body.request.category == Category.CERTIFICATES || 
+            body.request.category == Category.EMERGENCY_MEDICAL_ASSISTANCE
+        );
+
+        if (isIdentifierRequired && String.isBlank(body.request.linked_entity_identifier)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'Invalid request body. Category not allowed in CC flow.'
+            );
+        }
+
+        if (String.isNotBlank(body.request.linked_entity_identifier)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                422,
+                'Unprocessable Entity',
+                'Field: linked_entity_identifier must not be provided in CC flow'
+            );
+        }
+
+        if (String.isNotBlank(body.product_criteria.credit_card_token)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                422,
+                'Unprocessable Entity',
+                'Field: credit_card_token must not be provided in CC flow'
+            );
+        }
+
+        if (String.isBlank(body.product_criteria.bank_identification_number)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'Invalid request body. Mandatory field: product_criteria.bank_identification_number'
+            );
+        }
+    }
+
+    @TestVisible
+    private static String getCommunicationLanguage() {
+        String language = WebportalApiUtility_v1.getLanguage(RestContext.request);
+        if (language == 'es') {
+            return 'Spanish';
+        }
+        if (language == 'pt_BR') {
+            return 'Portuguese';
+        }
+        return 'English';
+    }
+
+    @TestVisible
+    private static String getOrigin(String clientId) {
+        String keyName = [SELECT Name FROM Client_Key__c WHERE ClientID__c = :clientId LIMIT 1].Name;
+        return WebportalApiUtility_v1.getRecordOrigin(keyName);
+    }
+
+    @TestVisible
+    private class ContactUsResponse {
+        public Id contactUsRequest_id;
+    }
+
+    @TestVisible
+    private class ContactUsRequestBody {
+        public PersonalData personal_data;
+        public ModelUtility.ProductCriteria product_criteria;
+        public RequestDetails request;
+    }
+
+    @TestVisible
+    private class PersonalData {
         public String first_name {
             get {
                 return first_name;
             }
             set {
-                WebportalApiUtility_v1.validateMaxLength(value, 40, 'first_name');
+                if(String.isBlank(value) || value.length() > 80) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (80) or blank: personal_data.first_name'
+                    );
+                }
+
                 first_name = value;
             }
         }
-
         public String last_name {
             get {
                 return last_name;
             }
             set {
-                WebportalApiUtility_v1.validateMaxLength(value, 80, 'last_name');
+                if(String.isBlank(value) || value.length() > 80) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (80) or blank: personal_data.last_name'
+                    );
+                }
+
                 last_name = value;
             }
         }
-        
+
         public String email {
             get {
                 return email;
@@ -299,7 +635,9 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
             set {
                 if (!WebportalApiUtility_v1.isValidEmail(value)) {
                     throw new WebportalApiUtility_v1.RequestAPIException(
-                        400, 'Bad Request', 'Invalid request body. Invalid format: email'
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Invalid format: personal_data.email'
                     );
                 }
 
@@ -307,15 +645,472 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
             }
         }
 
-        public CommunicationSubscriptions communication_subscriptions;
-    } 
-    
-    public class CommunicationSubscriptions {
-        public Boolean email;
-        public Boolean benefits_packages;
+        public ModelUtility.Phone phone;
+
+        public String country {
+            get {
+                return country;
+            }
+            set {
+                if (String.isBlank(value) || value.length() != 2) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (2) or blank: personal_data.country'
+                    );
+                }
+
+                country = value;
+            }
+        }
     }
 
-    public class PatchAgentRequest{
-        public CommunicationSubscriptions communication_subscriptions;
+    @TestVisible
+    private enum Category {
+        ACCESS,
+        BANK_INFORMATION,
+        BENEFITS_INFORMATION,
+        CERTIFICATES,
+        EMERGENCY_MEDICAL_ASSISTANCE,
+        OTHER,
+        REIMBURSEMENT,
+        REPORT_ISSUE
+    }
+
+    @TestVisible
+    private class RequestDetails {
+        public Category category;
+
+        public String description {
+            get {
+                return description;
+            }
+            set {
+                if(String.isBlank(value) || value.length() > 2000) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (2000) or blank: request.description'
+                    );
+                }
+
+                description = value;
+            }
+        }
+
+        public String linked_entity_identifier;
+
+        public List<ModelUtility.DocumentItem> documents;
+
     }
 }
+======================================================
+========================================================
+===========================================================
+=====================================================
+default
+
+
+POST
+/sales/enterprise/transversal/benefits_configuration/vexp/banks/{bank_id}/agents
+Creates the agent resource.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+bank_id *
+string
+(path)
+Identifier of the bank.
+
+b09aac28-7f63
+Responses
+Code	Description	Links
+200	
+Agent information.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "email": "jonathan.doe@mail.com",
+  "communication_subscriptions": {
+    "email": true
+  }
+}
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
+No links
+Extensions
+Field	Value
+x-satisfactory-response-time	{"acg":500}
+x-business-category	"TRAVEL"
+x-backends	{"$ref":"./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental"}
+
+GET
+/sales/enterprise/transversal/benefits_configuration/vexp/banks/{bank_id}/agents/{agent_id}
+Retrieves information on the connected agent.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+bank_id *
+string
+(path)
+Identifier of the bank.
+
+b09aac28-7f63
+agent_id *
+string
+(path)
+Identifier of the agent.
+
+b09aac28-7f63
+Responses
+Code	Description	Links
+200	
+Agent information.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "email": "jonathan.doe@mail.com",
+  "communication_subscriptions": {
+    "email": true
+  }
+}
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+404	
+Not found. The server did not find a current representation for the searched resource.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "404",
+  "error": "Not Found",
+  "error_description": "The searched resource was not found."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
+No links
+Extensions
+Field	Value
+x-satisfactory-response-time	{"acg":250}
+x-business-category	"TRAVEL"
+x-backends	{"$ref":"./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental"}
+
+PATCH
+/sales/enterprise/transversal/benefits_configuration/vexp/banks/{bank_id}/agents/{agent_id}
+Updates information on the connected agent.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+bank_id *
+string
+(path)
+Identifier of the bank.
+
+b09aac28-7f63
+agent_id *
+string
+(path)
+Identifier of the agent.
+
+b09aac28-7f63
+Responses
+Code	Description	Links
+200	
+Agent information.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "communication_subscriptions": {
+    "benefit_packages": true
+  }
+}
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+404	
+Not found. The server did not find a current representation for the searched resource.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "404",
+  "error": "Not Found",
+  "error_description": "The searched resource was not found."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
+No links
+Extensions
+Field	Value
+x-satisfactory-response-time	{"acg":500}
+x-business-category	"TRAVEL"
+x-backends	{"$ref":"./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental"}
+
+Schemas
+Jump to definitionPostAgentRequest{
+first_name*	string
+example: John
+maxLength: 80
+First name of the agent.
+
+last_name*	string
+example: Doe
+maxLength: 80
+Last name of the agent.
+
+email*	string($email)
+example: jonathan.doe@mail.com
+Email of the agent.
+
+communication_subscriptions	{
+description:	
+Communication subscriptions of the agent. When on, the agent will receive communications through that channel.
+
+email*	[...]
+ 
+}
+ 
+}
+Jump to definitionPatchAgentRequest{
+communication_subscriptions	{
+description:	
+Communication subscriptions of the agent. When on, the agent will receive communications through email for that category.
+
+benefit_packages	boolean
+example: true
+Is benefit packages communication subscription on?
+
+ 
+}
+ 
+}
+
+====================
+
+Estrutura do Communication
+- Existe um Objeto de Communication_Subscription__c
+se a informação vim true
+  "communication_subscriptions": {
+    "email": true
+  }
+deve ser criado um registro 
+Channel
+EMAIL
+Contact - vai ser o id do Contato
+
+No Get
+Deve ser buscado o Communication_Subscription__c com o Channel de EMAIL como a especificação
+  "communication_subscriptions": {
+    "email": true
+  }
+
+Para o Patch
+ainda serar usado o objeto de Communication_Subscription__c
+porem pode ver que ele se trata de de outro canal
+Related To
+BENEFIT_PACKAGE
+Channel
+PUSH_NOTIFICATION
+Contact
+Id do contact
+- se quiser me explicar como o push vai ser dessa forma é melhor para mim.
+
+Basicamente é isso, precisamos segui boas praticas de salesforce e da minha organização e também
+
+
+Essa parte do communication é opcional então se não for passado nem comunicado não deve retornar nada
+
+
