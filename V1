@@ -46,7 +46,9 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
 
             AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
 
-            validateRequiredPostFields(requestBody, agentRequest);
+            //validateRequiredPostFields(requestBody, agentRequest);
+
+            WebportalApiUtility_v1.validateRequestRequiredFields(requestBody, POST_REQUIRED_FIELDS);           
 
             List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
 
@@ -67,6 +69,13 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 Email = agentRequest.email
             );
             insert newAgent;
+
+            if(agentRequest.communication_subscriptions != null && agentRequest.communication_subscriptions.email == true) {
+                insert new Communication_Subscription__c(
+                    Contact__c = newAgent.Id,
+                    Channel__c = 'EMAIL'
+                );
+            }
 
             RestContext.response.statusCode = 200;
             RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(newAgent)));
@@ -118,7 +127,7 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
             }
 
-            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];            
 
             if (agentRecords.isEmpty()) {
                 throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
@@ -148,10 +157,32 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 );
             }
 
-        } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
+		} catch(DMLException ex) {
+            Database.rollback(savePoint);
+            System.debug(LoggingLevel.ERROR, 'DMLExpcetion: ' + ex.getMessage());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '500',
+                        'database_internal_server_error',
+                        'Error when try to insert Case in database.'
+                    )
+                )
+            );
+        } catch(Exception ex) {
+            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
+            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '500',
+                        'Internal Server Error',
+                        'Unexpected error creating the request: ' + ex.getMessage()
+                    )
+                )
+            );
         }
     }
 
@@ -163,6 +194,7 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
                 WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
                     RestContext.request,
                     new Set<String>{
+
                     }
                 );
 
@@ -189,8 +221,6 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
 
             AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
             
-            //validation input patch fields
-
             if (String.isNotBlank(agentRequest.first_name)) {
                 agentRecord.FirstName = agentRequest.first_name;
             }
@@ -227,21 +257,18 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
         response.last_name = agent.LastName;
         response.email = agent.Email;
 
-        return response;
-    }
+        List<Communication_Subscription__c> subscriptions = [
+            SELECT Id, Email__c 
+            FROM Communication_Subscription__c 
+            WHERE Contact__c = :agent.Id AND Channel__c = 'EMAIL'
+        ];
 
-    private static void validateRequiredPostFields(String requestBody, AgentData agentRequest) {
-        String errorRequiredFieldsMessage = WebportalApiUtility_v1.validateJSONRequiredFields(requestBody, POST_REQUIRED_FIELDS);
-
-        if(String.isNotBlank(errorRequiredFieldsMessage)) {
-            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field ' + errorRequiredFieldsMessage + ' is required');            
-        } else if(String.isBlank(agentRequest.first_name)) {
-            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field first_name must not be empty');
-        } else if(String.isBlank(agentRequest.last_name)) {
-            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field last_name must not be empty');
-        } else if(String.isBlank(agentRequest.email)) {
-            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Field email must not be empty');
+        if (!subscriptions.isEmpty()) {
+            response.communication_subscriptions = new CommunicationSubscriptions();
+            response.communication_subscriptions.email = true;
         }
+
+        return response;
     }
 
     public class AgentData {
@@ -280,11 +307,15 @@ global with sharing class WebportalSalesBanksAgents_VEXP {
             }
         }
 
-        public CommunicationSubscription communication_subscription;
+        public CommunicationSubscriptions communication_subscriptions;
     } 
     
-    public class CommunicationSubscription {
-        public Boolean communication_subscriptions;
+    public class CommunicationSubscriptions {
+        public Boolean email;
         public Boolean benefits_packages;
+    }
+
+    public class PatchAgentRequest{
+        public CommunicationSubscriptions communication_subscriptions;
     }
 }
