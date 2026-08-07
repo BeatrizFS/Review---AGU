@@ -1,28 +1,12 @@
-private static Communication_Subscription__c getCommunicationSubscription(
-    Id contactId,
-    String channel,
-    String relatedTo
-) {
-    List<Communication_Subscription__c> subscriptions;
+    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean enabled) {
 
-    if (channel == CHANNEL_EMAIL) {
-        subscriptions = [
-            SELECT Id, Channel__c, Related_To__c
-            FROM Communication_Subscription__c
-            WHERE Contact__c = :contactId
-            AND Channel__c = :channel
-            LIMIT 1
-        ];
-    } else {
-        subscriptions = [
-            SELECT Id, Channel__c, Related_To__c
-            FROM Communication_Subscription__c
-            WHERE Contact__c = :contactId
-            AND Channel__c = :channel
-            AND Related_To__c = :relatedTo
-            LIMIT 1
-        ];
+        Communication_Subscription__c subscription = getCommunicationSubscription(contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+
+        if (enabled) {
+            if (subscription == null) {
+                createCommunicationSubscription(accountId, contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+            }
+        } else if (subscription != null) {
+            delete subscription;
+        }
     }
-
-    return subscriptions.isEmpty() ? null : subscriptions[0];
-}
