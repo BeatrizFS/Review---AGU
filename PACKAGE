@@ -253,3 +253,653 @@ Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
 }]
  
 }
+
+=========================================================================================================================
+=========================================================================================================================
+========================================================================================================================
+LOGICAS BASE PARA BUSCAR OS BENEFICIOS CORE (NÃO OPCIONAIS) E OPCIONAIS para uso na API
+@RestResource(urlMapping='/v1/products/*/benefits/*')
+global with sharing class WebportalSalesBinProductBenefits_V1 extends WebportalProductsBenefitsAPIBase_V1 {
+
+    @HttpGet
+    global static void doGet() {
+		if(String.isBlank(RestContext.request.requestURI.substringAfter('/benefits/'))) {
+        	handleGet();
+		} else {
+			WebportalSalesSpecificProductBenefit_V1.doGet();
+		}
+    }
+
+    private static void handleGet() {
+		RestContext.response.addHeader('Content-Type', 'application/json');
+		
+		String productKey = RestContext.request.requestURI.substringBetween('/products/', '/benefits');
+
+		if(String.isBlank(productKey)) {
+			RestContext.response.statuscode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorResponse('bad_request', 'Empty Product Id')));
+		} else if(!isValidProductKey(productKey)) {
+			RestContext.response.statuscode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorResponse('bad_request', 'Invalid product key')));
+		} else {
+			Date asOfDate = RestContext.request.params.containsKey('as_of_date') ? Date.valueOf(RestContext.request.params.get('as_of_date')) : Date.today();
+			String asOfDateStr = RestContext.request.params.containsKey('as_of_date') ? RestContext.request.params.get('as_of_date') : null;
+
+			Boolean binNumberFound;
+			VG_BankIdentificationNumber__c binObj;
+			Boolean vdbpResponse = false;
+			
+            if(productKey.length() == 10 && productKey.isNumeric()) {
+            	try {
+            	    binObj 	       = WebportalApiUtility_v1.getBIN(productKey);
+            	    productKey     = binObj.Product_Version__r.Key__c != null ? binObj.Product_Version__r.Key__c : binObj.Product_Version__r.Product__r.Key__c;
+            	    binNumberFound = true;
+            	} catch(Exception e) {
+            	    System.debug('WebportalSalesBinProductBenefits_V1 (24)--> ' + e.getMessage() + ' <<>> ' + e.getStackTraceString());
+            	    binNumberFound = false;
+            	}
+            } else if(productKey.length() == 16) {
+				List<MN_Account_BIN__c> accountBINS = [SELECT Id, BIN__c FROM MN_Account_BIN__c WHERE Credit_Card_Token__c = :productKey];
+
+				if(accountBINS.size() == 0) {
+					binNumberFound = false;
+				} else {
+					MN_Account_BIN__c accountBIN = accountBINS[0];
+					binObj = [SELECT Id, Name, Bin_IssuerName__c, Product_Version__c, BIN_Country__c, BIN_6FirstDigits__c, BIN_10FirstDigitsStdEnc__c, Product_Version__r.Is_Express_Applicable__c, Product_Version__r.Product__r.Key__c FROM VG_BankIdentificationNumber__c WHERE Id = :accountBIN.BIN__c AND Status__c = 'Approved'];
+					binNumberFound = true;
+				}
+
+				if(binNumberFound) {
+					try {
+						List<VDBPService.BenefitWrapper> benefitsWrappers = VDBPService.getInstance().getBenefits(productKey, asOfDateStr);
+						List<BenefitResponse> response = new List<BenefitResponse>();
+						for(VDBPService.BenefitWrapper benefitWrapper : benefitsWrappers) {
+							BenefitResponse benefitResponse = new BenefitResponse();
+                            benefitResponse.benefit_id = benefitWrapper.benefit_id;
+                            benefitResponse.description = benefitWrapper.description ?? '';
+							benefitResponse.external_reference = benefitWrapper.external_reference;
+							benefitResponse.is_optional = benefitWrapper.is_optional;
+							benefitResponse.name = benefitWrapper.name;
+							response.add(benefitResponse);
+						}
+						vdbpResponse = true;
+						RestContext.response.statuscode   = 200;
+						RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(response));
+					} catch(CalloutException e) {
+						System.debug(e.getMessage());
+					} catch(VDBPService.VDBPServiceException e) {
+						System.debug(e.getMessage());
+					}
+				}
+			}
+
+            if(binNumberFound != null && !binNumberFound) {
+            	RestContext.response.statuscode = 404;
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorResponse('not_found', 'BIN not found')));
+            } else if(!vdbpResponse){
+				List<MN_Product_Benefit__c> mnProdBenefitsList;
+
+				if( binNumberFound != null ) {
+					mnProdBenefitsList = [
+						SELECT Id, Benefit__r.Id, Benefit__r.Name, Benefit__r.Benefit_Description__c, Benefit__r.Benefit_Record_Type__c, Benefit__r.External_Reference__c, Benefit__r.Category__c
+						FROM MN_Product_Benefit__c
+						WHERE Product__c = :binObj.Product_Version__c
+							AND Benefit__r.Benefit_Record_Type__c != null
+							AND Benefit__r.Web_Portal__c = true
+							AND Benefit__r.Active__c = true
+							AND (
+								Valid_Until__c >= :asOfDate
+								OR Valid_Until__c = null
+							)
+					];
+				} else {
+					mnProdBenefitsList = [
+						SELECT Id, Benefit__r.Id, Benefit__r.Name, Benefit__r.Benefit_Description__c, Benefit__r.Benefit_Record_Type__c, Benefit__r.External_Reference__c, Benefit__r.Category__c
+						FROM MN_Product_Benefit__c
+						WHERE Product__r.Key__c = :productKey
+							AND Benefit__r.Benefit_Record_Type__c != null
+							AND Benefit__r.Web_Portal__c = true
+							AND Benefit__r.Active__c = true
+							AND (
+								Valid_Until__c >= :asOfDate
+								OR Valid_Until__c = null
+							)
+					];
+
+					if(mnProdBenefitsList.isEmpty()){
+						mnProdBenefitsList = [
+							SELECT Id, Benefit__r.Id, Benefit__r.Name, Benefit__r.Benefit_Description__c, Benefit__r.Benefit_Record_Type__c, Benefit__r.External_Reference__c, Benefit__r.Category__c
+							FROM MN_Product_Benefit__c
+							WHERE Product__r.Product__r.Key__c = :productKey
+								AND Benefit__r.Benefit_Record_Type__c != null
+								AND Benefit__r.Web_Portal__c = true
+								AND Benefit__r.Active__c = true
+								AND (
+									Valid_Until__c >= :asOfDate
+									OR Valid_Until__c = null
+								)
+						];
+					}
+
+					if(mnProdBenefitsList.isEmpty()){
+
+						Set<String> countriesCodes = new Set<String>();
+						for(Country__c country : [Select Id, Code__c from Country__c] ) {
+							countriesCodes.add( country.Code__c );    
+						}
+                        
+                        if( productKey.split( '_' ).size() > 2 ) {
+                            List<String> productCodeParts = productKey.split( '_' );
+                            String countryCode = productCodeParts[ productCodeParts.size() - 1 ];
+                            
+                            if( countriesCodes.contains( countryCode ) ) {
+                                productCodeParts.remove( productCodeParts.size() -1 );
+                            }
+                            productKey = String.join( productCodeParts, '_' );
+                            System.debug( productKey );
+							mnProdBenefitsList = [SELECT Id, Benefit__r.Id, Benefit__r.Name, Benefit__r.Benefit_Description__c, Benefit__r.Benefit_Record_Type__c, Benefit__r.External_Reference__c, Benefit__r.Category__c  FROM MN_Product_Benefit__c  WHERE Product__r.Product__r.Key__c = :productKey and Product__r.Country_LKP__c = null and Benefit__r.Benefit_Record_Type__c != null and Benefit__r.Web_Portal__c = true and (Valid_Until__c >= :asOfDate OR Valid_Until__c = null)];
+                        }
+					}
+				}
+
+				if(mnProdBenefitsList.isEmpty()) {
+					RestContext.response.statuscode = 404;
+					RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorResponse('not_found', 'Product not found')));
+				} else {
+					Set<String> benefitsToExclude = new Set<String>();
+					if(binObj != null && binObj.BIN_Country__c != null) {
+						String binCountry = binObj.BIN_Country__c;
+						Set<Id> countriesIds = WebportalApiUtility_v1.getCountries(binCountry);
+	
+						List<Benefit_Country_Exception__c> countryExceptions = [SELECT Benefit__r.External_Reference__c, Country__c FROM Benefit_Country_Exception__c WHERE Country__c in :countriesIds];
+						for(Benefit_Country_Exception__c countryException : countryExceptions) {
+							benefitsToExclude.add(countryException.Benefit__r.External_Reference__c);
+						}
+					}						
+
+	 		    	Map<String, BenefitResponse> benefitsResponseMap = new Map<String, BenefitResponse>();
+
+					for (MN_Product_Benefit__c prodBenefit : mnProdBenefitsList) {
+						BenefitResponse benefitResponseObj          = new BenefitResponse();
+						benefitResponseObj.benefit_id              = prodBenefit.Benefit__r.Benefit_Record_Type__c;
+						benefitResponseObj.external_reference      = prodBenefit.Benefit__r.External_Reference__c;
+						benefitResponseObj.name                    = prodBenefit.Benefit__r.Name;
+						benefitResponseObj.description             = prodBenefit.Benefit__r.Benefit_Description__c ?? '';
+						benefitResponseObj.is_optional             = false;
+						benefitResponseObj.categories              = String.isBlank(prodBenefit.Benefit__r.Category__c) ? new List<String>() : new List<String>(prodBenefit.Benefit__r.Category__c.split(';'));
+
+						if( !benefitsToExclude.contains(prodBenefit.Benefit__r.External_Reference__c) ) {
+							benefitsResponseMap.put(prodBenefit.Benefit__r.External_Reference__c, benefitResponseObj);
+						}
+            		}
+
+					if(binNumberFound != null && binNumberFound) {
+						for(MN_BINRange_Benefit__c binRangeBenefit : [SELECT Id, Remove_Core_Benefit__c, Benefit__r.Id, Benefit__r.Name, Benefit__r.Benefit_Description__c, BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c, Benefit__r.Benefit_Record_Type__c, Benefit__r.External_Reference__c, Benefit__r.Category__c
+																	FROM MN_BINRange_Benefit__c
+																	WHERE BIN_Range__r.IIN_Number__c = :binObj.BIN_6FirstDigits__c AND Benefit__r.Benefit_Record_Type__c != null AND Benefit__r.Web_Portal__c = true ]) 
+						{
+							if(binObj.BIN_10FirstDigitsStdEnc__c >= binRangeBenefit.BIN_Range__r.Min_Bin_Range_Enc__c && binObj.BIN_10FirstDigitsStdEnc__c <= binRangeBenefit.BIN_Range__r.Max_Bin_Range_Enc__c ) {
+								if (!benefitsToExclude.contains(binRangeBenefit.Benefit__r.External_Reference__c) && !benefitsResponseMap.containsKey(binRangeBenefit.Benefit__r.External_Reference__c) && !binRangeBenefit.Remove_Core_Benefit__c) {
+									BenefitResponse benefitResponseObjOpt = new BenefitResponse();
+									benefitResponseObjOpt.benefit_id               = binRangeBenefit.Benefit__r.Benefit_Record_Type__c;
+									benefitResponseObjOpt.external_reference       = binRangeBenefit.Benefit__r.External_Reference__c;
+									benefitResponseObjOpt.name                     = binRangeBenefit.Benefit__r.Name;
+									benefitResponseObjOpt.description              = binRangeBenefit.Benefit__r.Benefit_Description__c ?? '';
+									benefitResponseObjOpt.is_optional              = true;
+									benefitResponseObjOpt.categories              = String.isBlank(binRangeBenefit.Benefit__r.Category__c) ? new List<String>() : new List<String>(binRangeBenefit.Benefit__r.Category__c.split(';'));
+
+									benefitsResponseMap.put(binRangeBenefit.Benefit__r.External_Reference__c, benefitResponseObjOpt);
+								}
+
+								if (benefitsResponseMap.containsKey(binRangeBenefit.Benefit__r.External_Reference__c) && binRangeBenefit.Remove_Core_Benefit__c) {
+									benefitsResponseMap.remove(binRangeBenefit.Benefit__r.External_Reference__c);
+								}
+							}
+						}
+					}
+
+					RestContext.response.statuscode = 200;
+					RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(benefitsResponseMap.values()));
+				}
+	        }
+		}
+    }
+
+    public class BenefitResponse {
+        public String  benefit_id;
+        public String  external_reference;
+        public String  name;
+    	public String  description; 
+    	public Boolean is_optional;
+		public List<String> categories;
+    }
+}
+
+public with sharing class SearchCustomerCTRL {
+    
+    @AuraEnabled
+    public static MN_Account_BIN__c getCustomerInfo( String accountId ){
+        try {
+            return [SELECT Customer__r.FirstName, Customer__r.LastName, Customer__r.PersonEmail, Customer__r.Phone, Customer__r.Account_Communication_Language__c, BIN__r.BIN_10FirstDigitsStdEnc__c
+                    FROM MN_Account_BIN__c 
+                    WHERE Customer__c = :accountId 
+                    AND Is_Preferred__c = true];
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    @AuraEnabled
+    public static List<AccountBINWrapper> search( String email, String binNumber, String firstName, String lastName, String phone ) {
+        try {
+            String query = 'Select Customer__c, Customer__r.Name, Customer__r.FirstName, Customer__r.LastName, Customer__r.Nationality__c, Customer__r.PersonBirthdate, Customer__r.Sex__pc, Customer__r.Phone, Customer__r.PersonEmail, Customer__r.VIP__c, Customer__r.PersonContactId, Customer__r.Account_Communication_Language__c,  BIN__c, BIN__r.BIN_6FirstDigits__c, BIN__r.BIN_10FirstDigitsStdEnc__c, BIN__r.BIN_Country__c, BIN__r.Product_Version__r.Name, BIN__r.Product_Version__r.Type__c, BIN__r.Bin_IssuerName__c, BIN__r.IIN__r.External__c, Credit_Card_Token__c, Is_Preferred__c from MN_Account_BIN__c';
+            List<String> whereClauses = new List<String>();
+            if( String.isNotBlank(email) ) {
+                whereClauses.add( 'Customer__r.PersonEmail = \'' + email + '\'' );
+            }
+            
+            if( String.isNotBlank(binNumber) ) {
+                String binNumberEncripted = CryptoTools.getSHA512(binNumber);
+                whereClauses.add( 'BIN__r.BIN_10FirstDigitsEnc__c = \'' + binNumberEncripted + '\'' );
+            }
+            
+            if( String.isNotBlank(firstName) ) {
+                whereClauses.add( 'Customer__r.FirstName = \'' + firstName + '\'' );
+            }
+            
+            if( String.isNotBlank(lastName) ) {
+                whereClauses.add( 'Customer__r.LastName = \'' + lastName + '\'' );
+            }
+            
+            if( String.isNotBlank(phone) ) {
+                whereClauses.add( 'Customer__r.Phone = \'' + phone + '\'' );
+            }
+            
+            if( whereClauses.size() == 0 ) {
+                AuraHandledException e = new AuraHandledException(Label.SearchCustomer_No_Filter_Selected_Error);
+                e.setMessage(Label.SearchCustomer_No_Filter_Selected_Error);
+                throw e;
+            } else {
+                whereClauses.add( 'Customer__r.ParentCustomerId__c = null' );
+                query += ' WHERE ' + String.join(whereClauses,' AND ');
+                List<AccountBINWrapper> result = new List<AccountBINWrapper>();
+                List<MN_Account_BIN__c> accountBINs = Database.query( query );                 
+                if(accountBINs.size() > 0){
+                    for( MN_Account_BIN__c accountBIN : accountBINs ) {
+                    
+                        result.add( new AccountBINWrapper( accountBIN ) );
+                    }
+                    return result;
+                } else {
+                    return result;
+                }
+            }
+            
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    @AuraEnabled
+    public static AccountBINWrapper getAccountBIN( String binNumber, String accountId, String firstName, String lastName, String email, String phone ){
+        try {
+            VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN( binNumber );
+            AccountBINWrapper accountBIN;
+            if (String.isNotBlank(accountId)){
+                List<MN_Account_BIN__c> accountBINList = [SELECT Customer__c, Customer__r.Name, Customer__r.FirstName, Customer__r.Nationality__c, Customer__r.LastName, Customer__r.PersonBirthdate, Customer__r.Sex__pc, Customer__r.Phone, Customer__r.PersonEmail, Customer__r.VIP__c, Customer__r.PersonContactId, Customer__r.Account_Communication_Language__c, BIN__c, BIN__r.BIN_6FirstDigits__c, BIN__r.BIN_10FirstDigitsStdEnc__c, BIN__r.BIN_Country__c, BIN__r.Product_Version__c, BIN__r.Product_Version__r.Name, BIN__r.Product_Version__r.Type__c, BIN__r.Bin_IssuerName__c, Credit_Card_Token__c, Is_Preferred__c FROM MN_Account_BIN__c WHERE BIN__c = :bin.Id AND Customer__c = :accountId LIMIT 1];
+                if(!accountBINList.isEmpty()) accountBIN = new AccountBINWrapper(accountBINList[0]);
+            } 
+            if(accountBIN == null){
+                VG_BankIdentificationNumber__c type = [SELECT Id, Product_Version__r.Type__c FROM VG_BankIdentificationNumber__c WHERE BIN_Number__c = :binNumber LIMIT 1];
+                bin.Product_Version__r.Type__c = type.Product_Version__r.Type__c;
+
+                String queryAccount = 'SELECT Id, Name, FirstName, LastName, PersonEmail, Phone, Nationality__c, Account_Communication_Language__c, PersonContactId, VIP__c, PersonBirthdate, Sex__pc FROM Account ';
+
+                String customerName = '';
+                List<String> conditions = new List<String>();
+
+                if (String.isNotBlank(firstName)) {
+                    conditions.add('FirstName = :firstName');
+                    customerName += firstName;
+                }
+                if (String.isNotBlank(lastName)) {
+                    conditions.add('LastName = :lastName');
+                    customerName += (customerName != '' ? ' ' : '') + lastName;
+                }
+                if (String.isNotBlank(email)) {
+                    conditions.add('PersonEmail = :email');
+                }
+                conditions.add('ParentCustomerId__c = null');
+
+                Boolean noHaveConditions = false;
+                if(conditions.size() > 0) {
+                    queryAccount += 'WHERE ';
+                } else {
+                    noHaveConditions = true;
+                }
+
+                queryAccount += String.join(conditions, ' AND ');
+                queryAccount += ' LIMIT 1';
+
+                List<Account> accList = Database.query(queryAccount);
+                if (accList.isEmpty() || noHaveConditions) {
+                    Account acc = new Account();
+                    acc.FirstName = firstName;
+                    acc.LastName = lastName;
+                    acc.Name = customerName;
+                    acc.PersonEmail = email;
+                    acc.Phone = phone;
+                    accountBIN = new AccountBINWrapper(acc, bin);
+                } else {
+                    Account acc = accList[0];
+                    accountBIN = new AccountBINWrapper(acc, bin);
+                }
+            }
+            return accountBIN;
+        } catch (QueryException e) {
+            AuraHandledException ex = new AuraHandledException('No Account-BIN found for provided bin number and account Id.');
+            ex.setMessage('No Account-BIN found for provided bin number and account Id.');
+            throw ex;
+        } catch (Exception e) {
+            if (e.getMessage().contains('BIN number not found')) {
+                return new AccountBINWrapper(new VG_BankIdentificationNumber__c());
+            } else {
+                AuraHandledException ex = new AuraHandledException(e.getMessage());
+                ex.setMessage(e.getMessage());
+                throw ex;
+            }
+        }
+    }
+    
+    @AuraEnabled
+    public static VG_BankIdentificationNumber__c getBINNumber( String binNumber ) {
+        try {
+            VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN( binNumber );
+            return bin;
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+
+    @AuraEnabled
+    public static BenefitsWrapper getBenefits(String creditCardToken, String binNumber) {
+        try {
+            if (String.isBlank(binNumber)) {
+                throw new SearchCustomerCTRLException('Get Benefits error: BIN Number cannot be null');
+            }
+
+            VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN(binNumber);
+
+            Map<Id, Benefit__c> coreBenefitsMap = new Map<Id, Benefit__c>();
+            Map<Id, Benefit__c> optionalBenefitsMap = new Map<Id, Benefit__c>();
+
+            Set<Id> benefitsToRemove = new Set<Id>();
+            for (Benefit_Country_Exception__c benefitCountryException : [SELECT Benefit__c FROM Benefit_Country_Exception__c WHERE Country__c IN (SELECT Id FROM Country__c WHERE Name LIKE :bin.BIN_Country__c)]) {
+                benefitsToRemove.add(benefitCountryException.Benefit__c);
+            }
+
+            for (MN_Product_Benefit__c productBenefit : [SELECT Benefit__r.Name FROM MN_Product_Benefit__c WHERE Product__c = :bin.Product_Version__c AND Benefit__r.Name NOT IN ('Informational', 'Other') AND Benefit__c NOT IN :benefitsToRemove]) {
+                coreBenefitsMap.put(productBenefit.Benefit__c, productBenefit.Benefit__r);
+            }
+            System.debug('core benefits' + coreBenefitsMap);
+
+            for (MN_BINRange_Benefit__c binRangeBenefit : [SELECT Benefit__r.Name, Remove_Core_Benefit__c, BIN_Range__r.Min_Bin_Range_Enc__c,BIN_Range__r.Max_Bin_Range_Enc__c FROM MN_BINRange_Benefit__c WHERE BIN_Range__r.IIN_Number__c = :bin.BIN_6FirstDigits__c AND Benefit__c NOT IN :benefitsToRemove]) {
+                if (binRangeBenefit.BIN_Range__r.Min_Bin_Range_Enc__c <= bin.BIN_10FirstDigitsStdEnc__c && bin.BIN_10FirstDigitsStdEnc__c <= binRangeBenefit.BIN_Range__r.Max_Bin_Range_Enc__c) {
+                    if (!coreBenefitsMap.containsKey(binRangeBenefit.Benefit__c) && !binRangeBenefit.Remove_Core_Benefit__c) {
+                        optionalBenefitsMap.put(binRangeBenefit.Benefit__c, binRangeBenefit.Benefit__r);
+                    }
+
+                    if (optionalBenefitsMap.containsKey(binRangeBenefit.Benefit__c) && binRangeBenefit.Remove_Core_Benefit__c) {
+                        optionalBenefitsMap.remove(binRangeBenefit.Benefit__c);
+                        benefitsToRemove.add(binRangeBenefit.Benefit__c);
+                    }
+                }
+            }
+            System.debug('optional benefits' + optionalBenefitsMap);
+            System.debug('core benefits' + coreBenefitsMap);
+
+            List<Benefit__c> notCoveredbenefits = [SELECT Id, Name FROM Benefit__c WHERE Id NOT IN :coreBenefitsMap.keySet() AND Id NOT IN :optionalBenefitsMap.keySet() AND Id NOT IN :benefitsToRemove];
+
+            return new BenefitsWrapper(coreBenefitsMap.values(), optionalBenefitsMap.values(), notCoveredbenefits);
+        } catch (SearchCustomerCTRLException ex) {
+            throw new AuraHandledException(ex.getMessage());
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            return new BenefitsWrapper(new List<Benefit__c>(), new List<Benefit__c>(), new List<Benefit__c>());
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
+            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
+            throw new AuraHandledException('Get Benefits unmmaped error: ' + ex.getMessage());
+        }
+    }
+    
+    @AuraEnabled
+    public static List<CaseWrapper> getCases( String accountBINId ) {
+        try {
+            MN_Account_BIN__c accountBIN = [Select Customer__c, Customer__r.Name, Customer__r.PersonEmail, Customer__r.VIP__c, BIN__c, BIN__r.BIN_6FirstDigits__c, BIN__r.BIN_Country__c, BIN__r.Product_Version__r.Name, BIN__r.Product_Version__r.Type__c, BIN__r.Bin_IssuerName__c, Credit_Card_Token__c from MN_Account_BIN__c where Id = :accountBINId];
+            List<CaseWrapper> result = new List<CaseWrapper>();
+            List<Case> claims = [Select ID, CaseNumber, Case_Benefit__r.Name, Subject, Priority, CreatedDate, Status, Status__c from Case where AccountID = :accountBIN.Customer__c ORDER BY CaseNumber DESC LIMIT 50];
+            for( Case claim : claims ) {
+                result.add( new CaseWrapper( claim ) );
+            }
+            return result;
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+
+    @AuraEnabled
+    public static PureBinWrapper getPureBin( String binNumber) {
+        try {
+            VG_BankIdentificationNumber__c query = [Select Id, BIN_Number__c, Bin_IssuerName__c, BIN_Country__c, BIN_ProductName__c, BIN_ProductType__c from VG_BankIdentificationNumber__c where BIN_Number__c =: binNumber LIMIT 1];
+            PureBinWrapper pureBin = new PureBinWrapper(query);
+            return pureBin;
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    @AuraEnabled
+    public static Benefit__c changeBenefit( String benefitId ) {
+        try {
+            Benefit__c benefit = [Select Id, Name, Certificate_type__c from Benefit__c where ID = :benefitId];
+            return benefit;
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    @AuraEnabled
+    public static String getCaseRecordTypeId( String benefitId ) {
+        try {
+            Benefit__c benefit = [Select Id, Name, Benefit_Record_Type__c from Benefit__c where ID = :benefitId];
+            String recordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByName().get(benefit.Benefit_Record_Type__c)?.getRecordTypeId();
+            System.debug(recordTypeId);
+            return recordTypeId;
+        } catch (Exception e) {
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    @AuraEnabled
+    public static String getInformationalCaseRecordTypeId(  ) {
+        String recordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByName().get('Informational').getRecordTypeId();
+        return recordTypeId;
+    }
+
+    @AuraEnabled
+    public static String getAccountRecoveryCaseRecordTypeId(  ) {
+        String recordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByName().get('Account Recovery').getRecordTypeId();
+        return recordTypeId;
+    }
+    
+    @AuraEnabled
+    public static String getQuickCallCaseRecordTypeId(  ) {
+        String recordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByName().get('Quick Call').getRecordTypeId();
+        return recordTypeId;
+    }
+    
+    @AuraEnabled
+    public static String getCertificateRecordTypeId( String benefitId ) {
+        try {
+            Benefit__c benefit = [Select Id, Name, Certificate_type__c from Benefit__c where ID = :benefitId];
+            String recordTypeId = Schema.SObjectType.Certificates__c.getRecordTypeInfosByDeveloperName().get(benefit.Certificate_type__c)?.getRecordTypeId();
+            System.debug(recordTypeId);
+            return recordTypeId;
+        } catch (Exception e) {
+            System.debug(e.getMessage());
+            AuraHandledException ex = new AuraHandledException(e.getMessage());
+            ex.setMessage(e.getMessage());
+            throw ex;
+        }
+    }
+    
+    public class BenefitsWrapper {
+        @AuraEnabled public List<SelectOptionWrapper> coreBenefits;
+        @AuraEnabled public List<SelectOptionWrapper> optionalBenefits;
+        @AuraEnabled public List<SelectOptionWrapper> notCoveredBenefits;
+        
+        public BenefitsWrapper( List<Benefit__c> coreBenefits, List<Benefit__c> optionalBenefits, List<Benefit__c> notCoveredBenefits ) {
+            this.coreBenefits = new List<SelectOptionWrapper>();
+            this.optionalBenefits = new List<SelectOptionWrapper>();
+            this.notCoveredBenefits = new List<SelectOptionWrapper>();
+            
+            for( Benefit__c coreBenefit : coreBenefits ) {
+                this.coreBenefits.add( new SelectOptionWrapper( coreBenefit.Id, coreBenefit.Name ) );
+            }
+
+            for( Benefit__c optionalBenefit : optionalBenefits ) {
+                this.optionalBenefits.add( new SelectOptionWrapper( optionalBenefit.Id, optionalBenefit.Name ) );
+            }
+            
+            for( Benefit__c notCoveredBenfit : notCoveredBenefits ) {
+                this.notCoveredBenefits.add( new SelectOptionWrapper( notCoveredBenfit.Id, notCoveredBenfit.Name ) );
+            }
+            this.coreBenefits.sort();
+            this.optionalBenefits.sort();
+            this.notCoveredBenefits.sort();
+        }
+    }
+    
+    public class SelectOptionWrapper implements Comparable {
+        @AuraEnabled public String value;
+        @AuraEnabled public String label;
+        
+        public SelectOptionWrapper( String value, String label ) {
+            this.value = value;
+            this.label = label;
+        }
+        
+        public Integer compareTo(Object compareTo) {
+            SelectOptionWrapper compareToOption = (SelectOptionWrapper) compareTo;
+            
+            if( this.label > compareToOption.label ) {
+                return 1;
+            } else if( this.label < compareToOption.label ) {
+                return -1;
+            } else {
+                return 0;
+            }
+        }
+    }
+
+    @AuraEnabled
+    public static String getBenefitDetails(String benefitId, String binNumber) {
+        System.debug('Entrou no getBenefitDetails');
+        
+        try {
+            System.debug('try getBenefitDetails');
+            if (!String.isBlank(benefitId) && !String.isBlank(binNumber)) {
+                
+                VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN(binNumber);
+                
+                if (bin != null) {
+                    List<MN_BINRange_Benefit__c> optionalBenefits = [SELECT Id FROM MN_BINRange_Benefit__c 
+                                                                     WHERE BIN_Range__r.Product__c = :bin.Product_Version__c
+                                                                     AND Benefit__c = :benefitId LIMIT 1];
+
+                    System.debug('optionalBenefits: ' + optionalBenefits);
+                    if (!optionalBenefits.isEmpty()) {
+                        List<MN_BINRange_Benefit__c> ranges = [SELECT BIN_Range__r.Benefit_Coverage__c, BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c 
+                                                               FROM MN_BINRange_Benefit__c 
+                                                               WHERE Benefit__c = :benefitId AND BIN_Range__r.IIN_Number__c = :bin.BIN_6FirstDigits__c ];
+                        
+                        for (MN_BINRange_Benefit__c binRange : ranges) {
+                            if (binRange.BIN_Range__r.Min_Bin_Range_Enc__c <= bin.BIN_10FirstDigitsStdEnc__c && 
+                                bin.BIN_10FirstDigitsStdEnc__c <= binRange.BIN_Range__r.Max_Bin_Range_Enc__c) {
+                                    System.debug('retornou ' + binRange.BIN_Range__r.Benefit_Coverage__c);
+                                    return binRange.BIN_Range__r.Benefit_Coverage__c;
+                        	}
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, e.getMessage());
+        }
+        System.debug('retornou nulo');
+        
+        return null;
+    }
+
+    @AuraEnabled
+    public static BenefitDetailsWrapper benefitDetailView(String coreId, String optId, String notCovId) {
+        System.debug('benefitDetailView entrou');
+
+        try {
+            System.debug('benefitDetailView - coreId: ' + coreId + ', optId: ' + optId + ', notCovId: ' + notCovId);
+
+            Benefit__c optionalBenefit;
+            Benefit__c coreBenefit;
+            Benefit__c notCoveredBenefit;
+
+            if (String.isNotBlank(optId)) {
+                optionalBenefit = [
+                    SELECT Id, Name, Active__c, CurrencyIsoCode
+                    FROM Benefit__c
+                    WHERE Id = :optId
+                    LIMIT 1
+                ];
+                System.debug('optionalBenefit: ' + optionalBenefit);
+            }
+
+            if (String.isNotBlank(coreId)) {
+                coreBenefit = [
+                    SELECT Id, Name, Active__c, CurrencyIsoCode
+                    FROM Benefit__c
+                    WHERE Id = :coreId
+                    LIMIT 1
+                ];
+                System.debug('coreBenefit: ' + coreBenefit);
+            }
+
+            if (String.isNotBlank(notCovId)) {
+                notCoveredBenefit = [
+                    SELECT Id, Name, Active__c, CurrencyIsoCode
+                    FROM Benefit__c
+                    WHERE Id = :notCovId
+                    LIMIT 1
+                ];
+                System.debug('notCoveredBenefit: ' + notCoveredBenefit);
+            }
+            
+            return new BenefitDetailsWrapper(optionalBenefit, coreBenefit, notCoveredBenefit);
+
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Error in benefitDetailView: ' + e.getMessage());
+            throw new AuraHandledException(e.getMessage());
+        }
+    }
