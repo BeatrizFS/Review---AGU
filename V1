@@ -1,11 +1,15 @@
 @isTest
-static void testSuccessPATCHBenefitPackageSubscriptionAlreadyExists() {
+static void testSuccessPATCHDeleteBenefitPackageSubscription() {
 
-    Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
-    Contact agent = [SELECT Id FROM Contact WHERE AccountId = :bank.Id LIMIT 1];
+    Contact agent = [
+        SELECT Id, AccountId
+        FROM Contact
+        WHERE Account.RecordType.DeveloperName = 'Bank'
+        LIMIT 1
+    ];
 
     insert new Communication_Subscription__c(
-        Customer__c = bank.Id,
+        Customer__c = agent.AccountId,
         Contact__c = agent.Id,
         Channel__c = 'PUSH_NOTIFICATION',
         Related_To__c = 'BENEFIT_PACKAGES'
@@ -14,14 +18,16 @@ static void testSuccessPATCHBenefitPackageSubscriptionAlreadyExists() {
     RestContext.request = new RestRequest();
     RestContext.request.requestURI =
         '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' +
-        bank.Id + '/agents/' + agent.Id;
+        agent.AccountId +
+        '/agents/' +
+        agent.Id;
     RestContext.request.httpMethod = 'PATCH';
     RestContext.request.headers.put('authorization2', 'Bearer ' + token);
 
     RestContext.request.requestBody = Blob.valueOf(
         '{' +
             '"communication_subscriptions":{' +
-                '"benefit_packages":true' +
+                '"benefit_packages":false' +
             '}' +
         '}'
     );
@@ -35,7 +41,7 @@ static void testSuccessPATCHBenefitPackageSubscriptionAlreadyExists() {
     System.assertEquals(200, RestContext.response.statusCode);
 
     System.assertEquals(
-        1,
+        0,
         [
             SELECT COUNT()
             FROM Communication_Subscription__c
@@ -53,7 +59,7 @@ static void testSuccessPATCHBenefitPackageSubscriptionAlreadyExists() {
             );
 
     System.assertEquals(
-        true,
+        false,
         response.communication_subscriptions.benefit_packages
     );
 }
