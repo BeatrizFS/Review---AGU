@@ -1,69 +1,112 @@
-            AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
+private static Communication_Subscription__c getCommunicationSubscription(
+    Id contactId,
+    String channel,
+    String relatedTo
+) {
+    String query =
+        'SELECT Id, Channel__c, Related_To__c ' +
+        'FROM Communication_Subscription__c ' +
+        'WHERE Contact__c = :contactId ' +
+        'AND Channel__c = :channel';
 
-            validateRequiredPostFields(requestBody, agentRequest);
+    if (String.isNotBlank(relatedTo)) {
+        query += ' AND Related_To__c = :relatedTo';
+    }
 
-            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+    List<Communication_Subscription__c> subscriptions =
+        Database.query(query);
 
-            if (bankRecords.isEmpty()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
-            }
+    return subscriptions.isEmpty() ? null : subscriptions[0];
+}
 
-            Account bank = bankRecords[0];
+private static void updateBenefitPackageSubscription(
+    Id accountId,
+    Id contactId,
+    Boolean enabled
+) {
 
-            Contact newAgent = new Contact(
-                AccountId = bank.Id,
-                FirstName = agentRequest.first_name,
-                LastName = agentRequest.last_name,
-                Email = agentRequest.email
+    Communication_Subscription__c subscription =
+        getBenefitPackageSubscription(contactId);
+
+    if (enabled) {
+
+        if (subscription == null) {
+
+            createCommunicationSubscription(
+                accountId,
+                contactId,
+                'PUSH_NOTIFICATION',
+                'BENEFIT_PACKAGE'
             );
-            insert newAgent;
-
-            if(agentRequest.communication_subscriptions != null && agentRequest.communication_subscriptions.email != null && agentRequest.communication_subscriptions.email) {
-                createCommunicationSubscriptions(bank.Id, newAgent.Id, 'Email', null);
-            }
-
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(newAgent)));
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-            if (ex.status_code == 401) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
-            } else if (ex.status_code == 403) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
-            } else {
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage(
-                            String.valueOf(ex.status_code),
-                            ex.error,
-                            ex.error_description
-                        )
-                    )
-                );
-            }
-        } catch (JSONException ex) {
-            RestContext.response.statusCode = 400;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
-        } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating agent.')));
-        }
-    }
-
-
-private static AgentData buildAgentResponse(Contact agent) {
-        AgentData response = new AgentData();
-        response.first_name = agent.FirstName;
-        response.last_name = agent.LastName;
-        response.email = agent.Email;
-
-        List<Communication_Subscription__c> subscriptions = [SELECT Id, Channel__c FROM Communication_Subscription__c WHERE Contact__c = :agent.Id AND Channel__c = 'Email' LIMIT 1];
-        if (!subscriptions.isEmpty()) {
-            response.communication_subscriptions = new CommunicationSubscriptions();
-            response.communication_subscriptions.email = true;
         }
 
-        return response;
+    } else {
+
+        if (subscription != null) {
+            delete subscription;
+        }
+
     }
+}
+
+AgentData request =
+    (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
+
+validateRequiredPatchFields(requestBody, request);
+
+Account bank = ...;
+
+Contact agent = ...;
+
+if (request.communication_subscriptions != null &&
+    request.communication_subscriptions.benefit_packages != null) {
+
+    updateBenefitPackageSubscription(
+        bank.Id,
+        agent.Id,
+        request.communication_subscriptions.benefit_packages
+    );
+}
+
+RestContext.response.statusCode = 200;
+RestContext.response.responseBody =
+    Blob.valueOf(
+        JSON.serializePretty(buildAgentResponse(agent))
+    );
+
+List<Account> bankRecords = [
+    SELECT Id
+    FROM Account
+    WHERE Id = :bankId
+    AND RecordType.DeveloperName = 'Issuer_Bank'
+    LIMIT 1
+];
+
+if (bankRecords.isEmpty()) {
+    throw new WebportalApiUtility_v1.RequestAPIException(
+        400,
+        'Bad Request',
+        'The input information received were not compliant with the endpoint specification.'
+    );
+}
+
+Account bank = bankRecords[0];
+
+List<Contact> agentRecords = [
+    SELECT Id, AccountId, FirstName, LastName, Email
+    FROM Contact
+    WHERE Id = :agentId
+    AND AccountId = :bank.Id
+    LIMIT 1
+];
+
+if (agentRecords.isEmpty()) {
+    throw new WebportalApiUtility_v1.RequestAPIException(
+        404,
+        'Not Found',
+        'Agent not found.'
+    );
+}
+
+Contact agent = agentRecords[0];
+
