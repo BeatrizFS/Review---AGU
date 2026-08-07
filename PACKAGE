@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+@RestResource(urlMapping='/sales/enterprise/transversal/*')
 global with sharing class VOBPSalesBenefitPackages_V1 {
 
     private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
@@ -23,8 +23,7 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
             WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
                 RestContext.request,
                 new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
-                    'urn:axa.partners.benefits_platform.write'
+
                 }
             );
 
@@ -171,3 +170,516 @@ global with sharing class VOBPSalesBenefitPackages_V1 {
         public String benefit_package_id;
     }
 }
+
+Em relação ao POST eu fiz isso até agora, vou estruturar o GET e depois volto para ele
+/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages
+Retrieves list of products package resource.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+start_index
+integer
+(query)
+A number that specifies the starting point when paging through a list of resources.
+
+Default value : 0
+
+0
+max_results
+integer
+(query)
+The maximum number of results when paging through a list of resources.
+
+Default value : 100
+
+100
+Responses
+Code	Description	Links
+200	
+Products information.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+[
+  {
+    "status": "ACTIVE",
+    "benefit_package_id": "b09aac28-7f63",
+    "product_reference": "I_C_BR",
+    "active_start_at": "2028-05-22",
+    "active_end_at": "2029-05-22",
+    "amount_of_policies": 12500
+  }
+]
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
+No links
+Extensions
+Field	Value
+x-satisfactory-response-time	{"acg":250}
+x-business-category	"TRAVEL"
+x-backends	{"$ref":"./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental"}
+
+Schemas
+Jump to definitionBenefitPackage{
+status*	string
+readOnly: true
+Status of the benefit package. It can be:
+
+ACTIVE: The benefit package is active.
+AWAITING_AGENT_SIGNATURE: The benefit package has been created and is awaiting the signature of the agent.
+AWAITING_START: The benefit package has been submitted and is awaiting its active_start_at date.
+CANCELLED: The benefit package has been cancelled by the agent.
+DRAFT: The benefit package has been created but not yet submited.
+EXPIRED: The active_end_at date has finished, and the benefit package is no longer active.
+N.B. The list of values is temporary and still needs to be validated / settled on MyDataAtlas before the release of the stable version.
+
+Enum:
+[ ACTIVE, AWAITING_AGENT_SIGNATURE, AWAITING_START, CANCELLED, DRAFT, EXPIRED ]
+benefit_package_id*	string
+maxLength: 18
+example: b09aac28-7f63
+readOnly: true
+Identifier of the benefit package.
+
+product_reference*	string
+maxLength: 10
+example: I_C_BR
+Short and readable concatenation of information related to the product.
+
+active_start_at*	string($date)
+example: 2028-05-22
+Date when the benefit package effect takes place.
+
+N.B. If the date is in the past, it will be set to today.
+
+ISO 8601 format (YYYY-MM-DD).
+
+active_end_at*	string($date)
+example: 2029-05-22
+Date when the benefit package ceases to have effect. ISO 8601 format (YYYY-MM-DD).
+
+amount_of_policies*	number($integer)
+minimum: 1
+example: 12500
+Estimated amount of policies that should be affected by the benefit package.
+
+affected_policy_range*	{
+description:	
+Range of policy numbers affected by the benefit package.
+
+external_number_start_at*	string
+maxLength: 10
+example: 1234569890
+Start of the policy number range.
+
+external_number_end_at*	string
+maxLength: 10
+example: 1234569890
+End of the policy number range.
+
+ 
+}
+core_benefits*	[
+maxItems: 100
+minItems: 1
+CoreBenefit{Jump to definition
+benefit_id*	string
+example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+maxLength: 80
+Identifier of the benefit.
+
+name*	string
+example: International Emergency Medical Services
+maxLength: 200
+Name of the benefit.
+
+ 
+}]
+optional_benefits	[
+maxItems: 100
+minItems: 1
+OptionalBenefit{Jump to definition
+benefit_id*	string
+example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+maxLength: 80
+Identifier of the benefit.
+
+name*	string
+example: International Emergency Medical Services
+maxLength: 200
+Name of the benefit.
+
+description*	string
+example: The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence.
+maxLength: 2000
+readOnly: true
+Description of the benefit.
+
+ 
+}]
+legal_consents*	[
+maxItems: 5
+List of consents that apply to the benefit package.
+
+LegalConsentItem{Jump to definition
+code*	string
+maxLength: 50
+example: legal_consent_I_understand
+Code of the consent such as
+
+legal_consent_I_understand
+legal_consent_I_authorize
+...
+is_confirmed	boolean
+Indicates if the consent has been confirmed or not.
+
+consented_at	string($date-time)
+example: 2019-03-22T10:59:00Z
+Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
+
+ 
+}]
+ 
+}
+Jump to definitionCoreBenefit{
+benefit_id*	string
+example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+maxLength: 80
+Identifier of the benefit.
+
+name*	string
+example: International Emergency Medical Services
+maxLength: 200
+Name of the benefit.
+
+ 
+}
+Jump to definitionOptionalBenefit{
+benefit_id*	string
+example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+maxLength: 80
+Identifier of the benefit.
+
+name*	string
+example: International Emergency Medical Services
+maxLength: 200
+Name of the benefit.
+
+description*	string
+example: The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence.
+maxLength: 2000
+readOnly: true
+Description of the benefit.
+
+ 
+}
+Jump to definitionBenefitPackageList[
+maxItems: 100
+BenefitPackageList{Jump to definition
+status*	string
+readOnly: true
+Status of the benefit package. It can be:
+
+ACTIVE: The benefit package is active.
+AWAITING_AGENT_SIGNATURE: The benefit package has been created and is awaiting the signature of the agent.
+AWAITING_START: The benefit package has been submitted and is awaiting its active_start_at date.
+CANCELLED: The benefit package has been cancelled by the agent.
+DRAFT: The benefit package has been created but not yet submited.
+EXPIRED: The active_end_at date has finished, and the benefit package is no longer active.
+Enum:
+[ ACTIVE, AWAITING_AGENT_SIGNATURE, AWAITING_START, CANCELLED, DRAFT, EXPIRED ]
+benefit_package_id*	string
+maxLength: 18
+example: b09aac28-7f63
+readOnly: true
+Identifier of the benefit package.
+
+product_reference*	string
+maxLength: 10
+example: I_C_BR
+Short and readable concatenation of information related to the product.
+
+active_start_at*	string($date)
+example: 2028-05-22
+Date when the benefit package effect takes place.
+
+N.B. If the date is in the past, it will be set to today.
+
+ISO 8601 format (YYYY-MM-DD).
+
+active_end_at*	string($date)
+example: 2029-05-22
+Date when the benefit package ceases to have effect. ISO 8601 format (YYYY-MM-DD).
+
+amount_of_policies*	number($integer)
+minimum: 1
+example: 12500
+Estimated amount of policies that should be affected by the benefit package.
+
+ 
+}]
+Jump to definitionSimplifiedBenefitPackage{
+status*	string
+readOnly: true
+Status of the benefit package. It can be:
+
+ACTIVE: The benefit package is active.
+AWAITING_AGENT_SIGNATURE: The benefit package has been created and is awaiting the signature of the agent.
+AWAITING_START: The benefit package has been submitted and is awaiting its active_start_at date.
+CANCELLED: The benefit package has been cancelled by the agent.
+DRAFT: The benefit package has been created but not yet submited.
+EXPIRED: The active_end_at date has finished, and the benefit package is no longer active.
+Enum:
+[ ACTIVE, AWAITING_AGENT_SIGNATURE, AWAITING_START, CANCELLED, DRAFT, EXPIRED ]
+benefit_package_id*	string
+maxLength: 18
+example: b09aac28-7f63
+readOnly: true
+Identifier of the benefit package.
+
+product_reference*	string
+maxLength: 10
+example: I_C_BR
+Short and readable concatenation of information related to the product.
+
+active_start_at*	string($date)
+example: 2028-05-22
+Date when the benefit package effect takes place.
+
+N.B. If the date is in the past, it will be set to today.
+
+ISO 8601 format (YYYY-MM-DD).
+
+active_end_at*	string($date)
+example: 2029-05-22
+Date when the benefit package ceases to have effect. ISO 8601 format (YYYY-MM-DD).
+
+amount_of_policies*	number($integer)
+minimum: 1
+example: 12500
+Estimated amount of policies that should be affected by the benefit package.
+
+ 
+}
+Jump to definitionBenefitPackagePostResponse{
+benefit_package_id*	string
+maxLength: 18
+example: b09aac28-7f63
+Identifier of the benefit package.
+
+ 
+}
+Jump to definitionEncryptedPayload{
+encrypted_data*	string
+maxLength: 500000
+example: eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.4B8mVZsJHq
+Full body using message level encryption.
+
+ 
+}
+Jump to definitionLegalConsentItem{
+code*	string
+maxLength: 50
+example: legal_consent_I_understand
+Code of the consent such as
+
+legal_consent_I_understand
+legal_consent_I_authorize
+...
+is_confirmed	boolean
+Indicates if the consent has been confirmed or not.
+
+consented_at	string($date-time)
+example: 2019-03-22T10:59:00Z
+Consent date. UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
+
+ 
+}
+
+====================
+
+Base de conhecimento
+   private static void handleGet() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
+                WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                    RestContext.request,
+                    new Set<String>{
+                        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only'
+                    }
+                );
+
+            String requestUri = RestContext.request.requestURI;
+            String bankId = requestUri.substringBetween('/banks/', '/agents/');
+            String agentId = requestUri.substringAfter('/agents/');
+
+            if (String.isBlank(bankId) || String.isBlank(agentId)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
+            }
+
+            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (agentRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
+            }
+
+            Contact agentRecord = agentRecords[0];
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agentRecord), true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
+        }
+    }
+    private static void handleGet() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData = WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(RestContext.Request, new Set<string> {
+            });
+            WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig = WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
+
+            Map<String, String> requestParams = RestContext.request.params;
+            checkQueryParams(requestParams, queryParamsOptions);
+
+            if(!requestParams.containsKey('benefit_code') && !requestParams.containsKey('claim_type_id')) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Both benefit_code and claim_type_id must not be null.');
+            }
+
+            String languageCode = WebportalApiUtility_v1.getLanguage(RestContext.request);
+            String documentDescription = languageCodeOptions.get('DOCUMENT_DESCRIPTION#' + languageCode);
+            String benefitDocumentQuery = 'SELECT Id, Document_Name__c, ' + documentDescription + ', isRequired__c, Is_Additional__c FROM Benefit_Document__c  WHERE MN_Product_Benefit__c = NULL AND Benefit_Name__c = \'{BENEFIT_RECORD_TYPE}\' AND isActive__c = true AND ' + languageCodeOptions.get('FOR_COUNTRY_OR_LANGUAGE#' + languageCode) + ' = true ORDER BY Order__c';
+            String benefitExternalReference;
+
+            if(requestParams.containsKey('benefit_code')) {
+                benefitExternalReference = requestParams.get('benefit_code');
+            } else {
+                benefitExternalReference = requestParams.get('claim_type_id');
+            }
+
+            List<Benefit__c> benefit = [SELECT Id, Benefit_Record_Type__c FROM Benefit__c WHERE External_Reference__c = :benefitExternalReference LIMIT 1];
+            if(benefit.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'not_found', 'There is no Benefit this External Reference.');
+            }
+
+            benefitDocumentQuery = benefitDocumentQuery.replace('{BENEFIT_RECORD_TYPE}', benefit[0].Benefit_Record_Type__c);
+            
+            List<DocumentResponse> response = new List<DocumentResponse>();
+            for(Benefit_Document__c benefitDocument : Database.query(benefitDocumentQuery)) {
+                DocumentResponse documentResponse = new DocumentResponse();
+                documentResponse.document_type_name = benefitDocument.Document_Name__c;
+                documentResponse.document_description = String.valueOf(benefitDocument.get(documentDescription));
+                documentResponse.is_multiple_upload_allowed = benefitDocument.Is_Additional__c;
+                documentResponse.is_mandatory = benefitDocument.isRequired__c;
+                response.add(documentResponse);
+            }
+
+            RestContext.response.statuscode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(response, true));
+        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statuscode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(RestContext.response.statuscode), ex.error, ex.error_description)));
+        } catch(QueryException ex) {
+            System.debug(LoggingLevel.WARN, 'Query String runtime error');
+            System.debug(LoggingLevel.ERROR, ex.getMessage());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500', 'database_internal_server_error', 'Internal Server Error.')));
+        } catch(Exception ex) {
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500', 'internal_server_error', 'Internal Server Error.')));
+        }
+    }
+
+    private static void checkQueryParams(Map<String, String> requestParam, Set<String> paramsToValidate) {
+        for(String paramToValidate : paramsToValidate) {
+            if(requestParam.containsKey(paramToValidate) && String.isBlank(requestParam.get(paramToValidate))) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Param: ' + paramToValidate + ' must not be blank.');
+            }
+        }
+    }
+
