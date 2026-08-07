@@ -1,12 +1,41 @@
-    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean enabled) {
+14:06:43.4 (147821960)|STATEMENT_EXECUTE|[270]
+14:06:43.4 (147849490)|METHOD_ENTRY|[270]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.createCommunicationSubscription(Id, Id, String, String)
+14:06:43.4 (147880869)|VARIABLE_SCOPE_BEGIN|[277]|accountId|Id|false|false
+14:06:43.4 (147931319)|VARIABLE_ASSIGNMENT|[277]|accountId|"001bY00000s1fgPQAQ"
+14:06:43.4 (147934598)|VARIABLE_SCOPE_BEGIN|[277]|contactId|Id|false|false
+14:06:43.4 (147949719)|VARIABLE_ASSIGNMENT|[277]|contactId|"003bY00001LyjQfQAJ"
+14:06:43.4 (147953262)|VARIABLE_SCOPE_BEGIN|[277]|channel|String|false|false
+14:06:43.4 (147966536)|VARIABLE_ASSIGNMENT|[277]|channel|"PUSH_NOTIFICATION"
+14:06:43.4 (147969091)|VARIABLE_SCOPE_BEGIN|[277]|relatedTo|String|false|false
+14:06:43.4 (147973637)|VARIABLE_ASSIGNMENT|[277]|relatedTo|"BENEFIT_PACKAGES"
+14:06:43.4 (147993221)|HEAP_ALLOCATE|[279]|Bytes:5
+14:06:43.4 (147996097)|STATEMENT_EXECUTE|[277]
+14:06:43.4 (147996941)|STATEMENT_EXECUTE|[278]
+14:06:43.4 (148030329)|HEAP_ALLOCATE|[279]|Bytes:4
+14:06:43.4 (148204533)|VARIABLE_ASSIGNMENT|[279]|this.Customer__c|"001bY00000s1fgPQAQ"|0x7489db15
+14:06:43.4 (148222974)|VARIABLE_ASSIGNMENT|[279]|this.Contact__c|"003bY00001LyjQfQAJ"|0x7489db15
+14:06:43.4 (148232137)|VARIABLE_ASSIGNMENT|[279]|this.Channel__c|"PUSH_NOTIFICATION"|0x7489db15
+14:06:43.4 (148258342)|VARIABLE_SCOPE_BEGIN|[278]|communicationSubscription|Communication_Subscription__c|true|false
+14:06:43.4 (148278080)|VARIABLE_ASSIGNMENT|[278]|communicationSubscription|{"Customer__c":"001bY00000s1fgPQAQ","Contact__c":"003bY00001LyjQfQAJ","Channel__c":"PUSH_NOTIFICATION"}|0x7489db15
+14:06:43.4 (148316955)|STATEMENT_EXECUTE|[285]
+14:06:43.4 (148317846)|STATEMENT_EXECUTE|[286]
+14:06:43.4 (148378896)|VARIABLE_ASSIGNMENT|[286]|this.Related_To__c|"BENEFIT_PACKAGES"|0x7489db15
+14:06:43.4 (148382838)|STATEMENT_EXECUTE|[289]
+14:06:43.4 (148407141)|HEAP_ALLOCATE|[289]|Bytes:8
+14:06:43.4 (148454134)|DML_BEGIN|[289]|Op:Insert|Type:Communication_Subscription__c|Rows:1
+14:06:43.4 (148491605)|HEAP_ALLOCATE|[EXTERNAL]|Bytes:8
+14:06:43.4 (159057109)|DML_END|[289]
+14:06:43.4 (159230756)|EXCEPTION_THROWN|[289]|System.DmlException: Insert failed. First exception on row 0; first error: INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Related To: bad value for restricted picklist field: BENEFIT_PACKAGES: [Related_To__c]
+14:06:43.4 (160153918)|HEAP_ALLOCATE|[289]|Bytes:185
+14:06:43.4 (160202739)|METHOD_EXIT|[270]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.createCommunicationSubscription(Id, Id, String, String)
+14:06:43.4 (160212646)|METHOD_EXIT|[199]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.updateBenefitPackageSubscription(Id, Id, Boolean)
+14:06:43.4 (160809157)|VARIABLE_SCOPE_BEGIN|[224]|ex|Exception|true|false
+14:06:43.4 (160922812)|VARIABLE_ASSIGNMENT|[224]|ex|"common.apex.runtime.impl.DmlExecutionException: Insert failed. First exception on row 0; first error: INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Related To: bad value for restricted picklist field: BENEFIT_PACKAGES: [Related_To__c]"|0x1b68ed2
+14:06:43.4 (160934405)|STATEMENT_EXECUTE|[224]
+14:06:43.4 (160936514)|STATEMENT_EXECUTE|[225]
+14:06:43.4 (161028651)|HEAP_ALLOCATE|[225]|Bytes:311
 
-        Communication_Subscription__c subscription = getCommunicationSubscription(contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+Eu já criei o valor na picklist BENEFIT_PACKAGES	BENEFIT_P ACKAGES
 
-        if (enabled) {
-            if (subscription == null) {
-                createCommunicationSubscription(accountId, contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
-            }
-        } else if (subscription != null) {
-            delete subscription;
-        }
-    }
+e uso assim     private static final String RELATED_TO_BENEFIT_PACKAGE = 'BENEFIT_PACKAGES';
+ 
