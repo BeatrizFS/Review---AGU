@@ -221,4 +221,85 @@ private static List<LegalConsentItem> getLegalConsents(
     return response;
 }
 
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class VOBPSalesBenefitPackagesDetails_V1{
 
+    global static void doGet() {
+        handleGet();
+    }
+
+    global static void handleGet() {
+
+    }
+
+    private static void handleGetDetails() {
+
+        RestContext.response.addHeader('Content-Type','application/json');
+
+        try {
+
+            authenticate();
+
+            Id benefitPackageId = getBenefitPackageId();
+
+            ServiceContract contract = (benefitPackageId);
+
+            if(contract == null){
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'not_found', 'Benefit package not found.');
+            }
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageResponse(contract),true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error,
+                        ex.error_description
+                    )
+                )
+            );
+        } catch(Exception ex) {
+            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
+            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '500',
+                        'Internal Server Error',
+                        'Unexpected error retrieving benefit packages: ' + ex.getMessage()
+                    )
+                )
+            );
+        }
+    }
+
+    private static ServiceContract getBenefitPackageId(Id benefitPackageId){
+        List<ServiceContract> benefitPackages = [
+            SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate, Amount_of_Policies__c 
+            FROM ServiceContract
+            WHERE Id =:benefitPackageId
+            LIMIT 1
+        ];
+
+        return benefitPackageId.isEmpty() ? null : benefitPackages[0];
+    }
+
+
+    public class BenefitPackage {
+        public String status;
+        public String benefit_package_id; 
+        public String product_reference; 
+        public Date active_start_at; 
+        public Date active_end_at; 
+        public Integer amount_of_policies;
+        public AffectedPolicyRange affected_policy_range;
+        public List<CoreBenefit> core_benefits;
+        public List<OptionalBenefit> optional_benefits;
+        public List<LegalConsentItem> legal_consents;
+    }    
+}
