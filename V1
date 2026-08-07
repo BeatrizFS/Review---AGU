@@ -1,43 +1,54 @@
-services/apexrest/sales/enterprise/transversal/benefits_configuration/vexp/banks/001bY00000s1fgPQAQ
-
-a busca apenas do bank não está funcionando retorna
-
-{
-    "status_code": "403",
-    "error_description": "The right to access this endpoint has not been granted in the JSON Web Token.",
-    "error": "Forbidden"
-}
-
-    private static void handleGet() {
+    private static void handlePatch() {
         try {
             RestContext.response.addHeader('Content-Type', 'application/json');
 
-            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
-                WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                    RestContext.request,
-                    new Set<String>{
-                        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only'
-                    }
-                );
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
+                }
+            );
 
             String requestUri = RestContext.request.requestURI;
             String bankId = requestUri.substringBetween('/banks/', '/agents/');
             String agentId = requestUri.substringAfter('/agents/');
 
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
             if (String.isBlank(bankId) || String.isBlank(agentId)) {
                 throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
             }
 
-            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+            AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
 
-            if (agentRecords.isEmpty()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
+            validateRequiredPatchFields(requestBody, agentRequest);
+
+            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (bankRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'The input information received were not compliant with the endpoint specification.');
             }
 
-            Contact agentRecord = agentRecords[0];
+            Account bank = bankRecords[0];
+
+            List<Contact> agentRecords = [
+                SELECT Id, AccountId, FirstName, LastName, Email
+                FROM Contact
+                WHERE Id = :agentId
+                AND AccountId = :bank.Id
+                LIMIT 1
+            ];
+
+            if (agentRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not Found', 'Agent not found.');
+            }
+
+            Contact agent = agentRecords[0];            
 
             RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agentRecord), true));
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agent), true));
 
         } catch (WebportalApiUtility_v1.RequestAPIException ex) {
             RestContext.response.statusCode = ex.status_code;
@@ -61,6 +72,60 @@ a busca apenas do bank não está funcionando retorna
         } catch (Exception ex) {
             System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
             RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error updating agent information.')));
         }
+    }
+
+    private static Communication_Subscription__c getCommunicationSubscription(Id contactId, String channel, String relatedTo) {
+        String query = 'SELECT Id, Channel__c, Related_To__c ' + 'FROM Communication_Subscription__c ' + 'WHERE Contact__c = :contactId ' + 'AND Channel__c = :channel';
+        if (String.isNotBlank(relatedTo)) {
+            query += ' AND Related_To__c = :relatedTo';
+        }
+        List<Communication_Subscription__c> subscriptions = Database.query(query);
+        return subscriptions.isEmpty() ? null : subscriptions[0];
+    }
+
+    private static AgentData buildAgentResponse(Contact agent) {
+        AgentData response = new AgentData();
+        response.first_name = agent.FirstName;
+        response.last_name = agent.LastName;
+        response.email = agent.Email;
+
+        Communication_Subscription__c emailSubscription = getCommunicationSubscription(agent.Id, 'EMAIL', null);
+
+        if (emailSubscription != null) {
+            response.communication_subscriptions = new CommunicationSubscriptions();
+            response.communication_subscriptions.email = true;
+        }
+
+        return response;
+    }
+
+    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean enabled) {
+
+        Communication_Subscription__c subscription = getBenefitPackageSubscription(contactId);
+
+        if (enabled) {
+            if (subscription == null) {
+                createCommunicationSubscriptions(accountId, contactId, 'PUSH_NOTIFICATION', 'BENEFIT_PACKAGE');
+            }
+        } else {
+            if (subscription != null) {
+                delete subscription;
+            }
+        }
+    }
+
+    private static void createCommunicationSubscriptions(Id accountId, Id contactId, String channel, String relatedTo) {
+        Communication_Subscription__c communicationSubscription = new Communication_Subscription__c(
+            Customer__c = accountId,
+            Contact__c = contactId,
+            Channel__c = channel
+        );
+
+        if(String.isNotBlank(relatedTo)) {
+            communicationSubscription.Related_To__c = relatedTo;
+        }
+
+        insert communicationSubscription;
     }
