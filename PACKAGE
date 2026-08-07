@@ -1,78 +1,100 @@
-    private void getList(Account existingCustomer,WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData) {
-        
-        List<SmartContractGet> response = new List<SmartContractGet>();
-        List<Trip_Assistance__c> allContracts = new List<Trip_Assistance__c>();
-        
-        String creditCardToken = RestContext.request.params.get('credit_card_token');
-		String bankIdentificationNumber = RestContext.request.params.get('bank_identification_number');
-        String contractId;
-        
-        if (RestContext.request.params.get('credit_card_token') != null) {
-            WebportalApiUtility_v1.validateCreditCardToken(creditCardToken, false);
-            contractId = creditCardToken;
-        } else if (RestContext.request.params.get('bank_identification_number') != null) {
-            WebportalApiUtility_v1.validateBinNumber(bankIdentificationNumber, false);
-            contractId = bankIdentificationNumber;
-        }
-        
-        if (String.isNotBlank(contractId)) {
-                                    
-            WebportalAPITokenAuthentication_v1.validateAccountAccess(existingCustomer.Id, creditCardToken, bankIdentificationNumber);
-            
-            allContracts = [
-                SELECT Id, Name, Status__c, Trip_Start_Date__c, Trip_End_Date__c, 
-                MN_Account_BIN__r.Credit_Card_Token__c, Country_of_Origin__c, Country_of_Destination__c
-                FROM Trip_Assistance__c 
-                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CERTIFICATE' 
-                AND (MN_Account_BIN__r.Credit_Card_Token__c =: contractId OR MN_Account_BIN__r.BIN__r.BIN_Number__c =: contractId)];
-            
-        } else {
-            allContracts = [
-                SELECT Id, Name, Status__c, Trip_Start_Date__c, Trip_End_Date__c, 
-                MN_Account_BIN__r.Credit_Card_Token__c, Country_of_Origin__c, Country_of_Destination__c
-                FROM Trip_Assistance__c 
-                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CERTIFICATE'];
-        }
-        
-        if (allContracts.isEmpty()) {
-            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, JSON.serializePretty(response, true));
-            ModelUtility.EncryptedData encryptObj =  new ModelUtility.EncryptedData();
-            encryptObj.encrypted_data = encryptedResponse;
-            
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
-        } else {
-            Map<String, String> requestParams = RestContext.request.params;
-            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
-        
-            Integer totalSize = allContracts.size();
-            List<Trip_Assistance__c> paginatedContracts = WebportalApiUtility_v1.getPaginatedSObject(
-                allContracts, 
-                paginationParams.get('start_index'), 
-                paginationParams.get('max_results'), 
-                totalSize
+private static void handleGet() {
+    try {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                'urn:axa.partners.benefits_platform.read_only'
+            }
+        );
+
+        Map<String, String> requestParams = RestContext.request.params;
+        Map<String, Integer> paginationParams =
+            WebportalApiUtility_v1.validatePaginationQueryParams(
+                requestParams,
+                100
             );
 
-            for(Trip_Assistance__c iterator : paginatedContracts) {
-                SmartContractGet responseItem = new SmartContractGet();
-                responseItem.smart_contract_id = iterator.Id;
-                responseItem.smart_contract_number = iterator.Name;
-                responseItem.status = iterator.Status__c;
-                responseItem.travel_information = new WebportalCertificatesAPITravel_V3.TravelInformation();
-                responseItem.travel_information.start_date = String.valueOf(iterator.Trip_Start_Date__c);
-                responseItem.travel_information.end_date = String.valueOf(iterator.Trip_End_Date__c);
-                responseItem.travel_information.country_origin = WebportalApiUtility_v1.inverseCountryCodesMapping.get(iterator.Country_of_Origin__c?.toUppercase());
-                responseItem.travel_information.country_destination = WebportalApiUtility_v1.inverseCountryCodesMapping.get(iterator.Country_of_Destination__c?.toUppercase());
-                response.add(responseItem);
-            }
+        List<ServiceContract> benefitPackages = [
+            SELECT
+                Id,
+                Package_Status__c,
+                Product_Reference__c,
+                StartDate,
+                EndDate,
+                Amount_of_Policies__c
+            FROM ServiceContract
+            ORDER BY CreatedDate DESC
+        ];
 
-            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, JSON.serializePretty(response, true));
-            ModelUtility.EncryptedData encryptObj =  new ModelUtility.EncryptedData();
-            encryptObj.encrypted_data = encryptedResponse;
+        List<ServiceContract> paginatedBenefitPackages =
+            WebportalApiUtility_v1.getPaginatedSObject(
+                benefitPackages,
+                paginationParams.get('start_index'),
+                paginationParams.get('max_results'),
+                benefitPackages.size()
+            );
 
-            RestContext.response.statuscode = 200;
-            RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(paginationParams.get('start_index'), paginatedContracts.size(), allContracts.size()));
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
+        RestContext.response.statusCode = 200;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                buildBenefitPackageListResponse(paginatedBenefitPackages),
+                true
+            )
+        );
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+
+        RestContext.response.statusCode = ex.status_code;
+
+        if (ex.status_code == 401) {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '401',
+                        'Unauthorized',
+                        'Header "authorization" is not a valid JSON Web Token.'
+                    )
+                )
+            );
+        } else if (ex.status_code == 403) {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '403',
+                        'Forbidden',
+                        'The right to access this endpoint has not been granted in the JSON Web Token.'
+                    )
+                )
+            );
+        } else {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error,
+                        ex.error_description
+                    ),
+                    true
+                )
+            );
         }
 
- isso não é feito aqui?
+    } catch (Exception ex) {
+
+        System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error retrieving benefit packages.'
+                )
+            )
+        );
+    }
+}
