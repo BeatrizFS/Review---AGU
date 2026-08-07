@@ -98,3 +98,27 @@ private static void handleGet() {
         );
     }
 }
+
+
+private static List<SimplifiedBenefitPackage> buildBenefitPackageListResponse(
+    List<ServiceContract> contracts
+) {
+    List<SimplifiedBenefitPackage> response =
+        new List<SimplifiedBenefitPackage>();
+
+    for (ServiceContract contract : contracts) {
+
+        SimplifiedBenefitPackage item = new SimplifiedBenefitPackage();
+
+        item.status = contract.Status__c;
+        item.benefit_package_id = contract.Id;
+        item.product_reference = contract.Product_Reference__c;
+        item.active_start_at = contract.StartDate;
+        item.active_end_at = contract.EndDate;
+        item.amount_of_policies = Integer.valueOf(contract.Amount_of_Policies__c);
+
+        response.add(item);
+    }
+
+    return response;
+}
