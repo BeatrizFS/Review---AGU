@@ -1,41 +1,234 @@
-14:06:43.4 (147821960)|STATEMENT_EXECUTE|[270]
-14:06:43.4 (147849490)|METHOD_ENTRY|[270]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.createCommunicationSubscription(Id, Id, String, String)
-14:06:43.4 (147880869)|VARIABLE_SCOPE_BEGIN|[277]|accountId|Id|false|false
-14:06:43.4 (147931319)|VARIABLE_ASSIGNMENT|[277]|accountId|"001bY00000s1fgPQAQ"
-14:06:43.4 (147934598)|VARIABLE_SCOPE_BEGIN|[277]|contactId|Id|false|false
-14:06:43.4 (147949719)|VARIABLE_ASSIGNMENT|[277]|contactId|"003bY00001LyjQfQAJ"
-14:06:43.4 (147953262)|VARIABLE_SCOPE_BEGIN|[277]|channel|String|false|false
-14:06:43.4 (147966536)|VARIABLE_ASSIGNMENT|[277]|channel|"PUSH_NOTIFICATION"
-14:06:43.4 (147969091)|VARIABLE_SCOPE_BEGIN|[277]|relatedTo|String|false|false
-14:06:43.4 (147973637)|VARIABLE_ASSIGNMENT|[277]|relatedTo|"BENEFIT_PACKAGES"
-14:06:43.4 (147993221)|HEAP_ALLOCATE|[279]|Bytes:5
-14:06:43.4 (147996097)|STATEMENT_EXECUTE|[277]
-14:06:43.4 (147996941)|STATEMENT_EXECUTE|[278]
-14:06:43.4 (148030329)|HEAP_ALLOCATE|[279]|Bytes:4
-14:06:43.4 (148204533)|VARIABLE_ASSIGNMENT|[279]|this.Customer__c|"001bY00000s1fgPQAQ"|0x7489db15
-14:06:43.4 (148222974)|VARIABLE_ASSIGNMENT|[279]|this.Contact__c|"003bY00001LyjQfQAJ"|0x7489db15
-14:06:43.4 (148232137)|VARIABLE_ASSIGNMENT|[279]|this.Channel__c|"PUSH_NOTIFICATION"|0x7489db15
-14:06:43.4 (148258342)|VARIABLE_SCOPE_BEGIN|[278]|communicationSubscription|Communication_Subscription__c|true|false
-14:06:43.4 (148278080)|VARIABLE_ASSIGNMENT|[278]|communicationSubscription|{"Customer__c":"001bY00000s1fgPQAQ","Contact__c":"003bY00001LyjQfQAJ","Channel__c":"PUSH_NOTIFICATION"}|0x7489db15
-14:06:43.4 (148316955)|STATEMENT_EXECUTE|[285]
-14:06:43.4 (148317846)|STATEMENT_EXECUTE|[286]
-14:06:43.4 (148378896)|VARIABLE_ASSIGNMENT|[286]|this.Related_To__c|"BENEFIT_PACKAGES"|0x7489db15
-14:06:43.4 (148382838)|STATEMENT_EXECUTE|[289]
-14:06:43.4 (148407141)|HEAP_ALLOCATE|[289]|Bytes:8
-14:06:43.4 (148454134)|DML_BEGIN|[289]|Op:Insert|Type:Communication_Subscription__c|Rows:1
-14:06:43.4 (148491605)|HEAP_ALLOCATE|[EXTERNAL]|Bytes:8
-14:06:43.4 (159057109)|DML_END|[289]
-14:06:43.4 (159230756)|EXCEPTION_THROWN|[289]|System.DmlException: Insert failed. First exception on row 0; first error: INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Related To: bad value for restricted picklist field: BENEFIT_PACKAGES: [Related_To__c]
-14:06:43.4 (160153918)|HEAP_ALLOCATE|[289]|Bytes:185
-14:06:43.4 (160202739)|METHOD_EXIT|[270]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.createCommunicationSubscription(Id, Id, String, String)
-14:06:43.4 (160212646)|METHOD_EXIT|[199]|01pbY000005MJyn|WebportalSalesBanksAgents_VEXP.updateBenefitPackageSubscription(Id, Id, Boolean)
-14:06:43.4 (160809157)|VARIABLE_SCOPE_BEGIN|[224]|ex|Exception|true|false
-14:06:43.4 (160922812)|VARIABLE_ASSIGNMENT|[224]|ex|"common.apex.runtime.impl.DmlExecutionException: Insert failed. First exception on row 0; first error: INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Related To: bad value for restricted picklist field: BENEFIT_PACKAGES: [Related_To__c]"|0x1b68ed2
-14:06:43.4 (160934405)|STATEMENT_EXECUTE|[224]
-14:06:43.4 (160936514)|STATEMENT_EXECUTE|[225]
-14:06:43.4 (161028651)|HEAP_ALLOCATE|[225]|Bytes:311
+Body
+{
+  "communication_subscriptions": {
+    "benefit_packages": true
+  }
+}
 
-Eu já criei o valor na picklist BENEFIT_PACKAGES	BENEFIT_P ACKAGES
+Cria o registro
 
-e uso assim     private static final String RELATED_TO_BENEFIT_PACKAGE = 'BENEFIT_PACKAGES';
- 
+Retorno
+{
+    "last_name": "Doe",
+    "first_name": "John",
+    "email": "jonathan.doe@mail.com",
+    "communication_subscriptions": {
+        "email": true
+    }
+}
+
+porém esse retorno deveria ser 
+{
+  "communication_subscriptions": {
+    "benefit_packages": true
+  }
+}
+conforme a especificação
+além disso quando eu tento criar de novo ele retorna 
+{
+    "last_name": "Doe",
+    "first_name": "John",
+    "email": "jonathan.doe@mail.com",
+    "communication_subscriptions": {
+        "email": true
+    }
+}
+como se eu tivesse criado dois, quando poderia dizer que o usuário já está com o 
+  "communication_subscriptions": {
+    "benefit_packages": true
+  }
+ou seja que já existe um registro desse criado
+
+quando passo o 
+  "communication_subscriptions": {
+    "benefit_packages": false
+  }
+ele executa a deleção, porém retorna 
+
+{
+    "last_name": "Doe",
+    "first_name": "John",
+    "email": "jonathan.doe@mail.com",
+    "communication_subscriptions": {
+        "email": true
+    }
+}
+
+quando deveria retornar 
+  "communication_subscriptions": {
+    "benefit_packages": false
+  }
+conforme a espeficiação
+
+-----------------------
+
+    private static void handlePatch() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
+                }
+            );
+
+            String requestUri = RestContext.request.requestURI;
+            String bankId = requestUri.substringBetween('/banks/', '/agents/');
+            String agentId = requestUri.substringAfter('/agents/');
+
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
+            if (String.isBlank(bankId) || String.isBlank(agentId)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'The input information received were not compliant with the endpoint specification.');
+            }
+
+            AgentData agentRequest = (AgentData) JSON.deserializeStrict(requestBody, AgentData.class);
+
+            List<Contact> agentRecords = [SELECT Id, AccountId, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (agentRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not Found', 'The searched resource was not found.');
+            }
+
+            Contact agent = agentRecords[0];
+
+            if (agentRequest.communication_subscriptions != null &&
+                agentRequest.communication_subscriptions.benefit_packages != null) {
+
+                updateBenefitPackageSubscription(bankId, agent.Id, agentRequest.communication_subscriptions.benefit_packages);
+            }
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agent), true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error updating agent information.')));
+        }
+    }
+
+    private static Communication_Subscription__c getCommunicationSubscription(Id contactId, String channel, String relatedTo) {
+        List<Communication_Subscription__c> subscriptions;
+        if (channel == CHANNEL_EMAIL) {
+            subscriptions = [SELECT Id, Channel__c, Related_To__c 
+                FROM Communication_Subscription__c 
+                WHERE Contact__c = :contactId 
+                AND Channel__c = :channel LIMIT 1];
+        } else {
+            subscriptions = [SELECT Id, Channel__c, Related_To__c 
+                FROM Communication_Subscription__c 
+                WHERE Contact__c = :contactId 
+                AND Channel__c = :channel 
+                AND Related_To__c = :relatedTo LIMIT 1];
+        }
+        return subscriptions.isEmpty() ? null : subscriptions[0];
+    }
+
+    private static AgentData buildAgentResponse(Contact agent) {
+        AgentData response = new AgentData();
+        response.first_name = agent.FirstName;
+        response.last_name = agent.LastName;
+        response.email = agent.Email;
+
+        Communication_Subscription__c emailSubscription = getCommunicationSubscription(agent.Id, CHANNEL_EMAIL, null);
+
+        if (emailSubscription != null) {
+            response.communication_subscriptions = new CommunicationSubscriptions();
+            response.communication_subscriptions.email = true;
+        }
+
+        return response;
+    }
+
+    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean isSubscribed) {
+
+        Communication_Subscription__c subscription = getCommunicationSubscription(contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+
+        if (isSubscribed) {
+            if (subscription == null) {
+                createCommunicationSubscription(accountId, contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+            }
+        } else if (subscription != null) {
+            delete subscription;
+        }
+    }
+
+    private static void createCommunicationSubscription(Id accountId, Id contactId, String channel, String relatedTo) {
+        Communication_Subscription__c communicationSubscription = 
+            new Communication_Subscription__c(
+                Customer__c = accountId,
+                Contact__c = contactId,
+                Channel__c = channel
+        );
+
+        if(String.isNotBlank(relatedTo)) {
+            communicationSubscription.Related_To__c = relatedTo;
+        }
+
+        insert communicationSubscription;
+    }
+
+    public class AgentData {
+        public String first_name {
+            get {
+                return first_name;
+            }
+            set {
+                WebportalApiUtility_v1.validateMaxLength(value, 40, 'first_name');
+                first_name = value;
+            }
+        }
+
+        public String last_name {
+            get {
+                return last_name;
+            }
+            set {
+                WebportalApiUtility_v1.validateMaxLength(value, 80, 'last_name');
+                last_name = value;
+            }
+        }
+        public String email {
+            get {
+                return email;
+            }
+            set {
+                if (!WebportalApiUtility_v1.isValidEmail(value)) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400, 'Bad Request', 'Invalid request body. Invalid format: email'
+                    );
+                }
+
+                email = value;
+            }
+        }
+        public CommunicationSubscriptions communication_subscriptions;
+    }
+    
+    public class CommunicationSubscriptions{
+        public Boolean email;
+        public Boolean benefit_packages;
+    }
