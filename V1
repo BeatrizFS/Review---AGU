@@ -1,234 +1,53 @@
-Body
-{
-  "communication_subscriptions": {
-    "benefit_packages": true
-  }
+private static BenefitPackageSubscriptionResponse buildBenefitPackageSubscriptionResponse(
+    Boolean benefitPackages
+) {
+    BenefitPackageSubscriptionResponse response =
+        new BenefitPackageSubscriptionResponse();
+
+    response.communication_subscriptions =
+        new CommunicationSubscriptions();
+
+    response.communication_subscriptions.benefit_packages =
+        benefitPackages;
+
+    return response;
 }
 
-Cria o registro
+RestContext.response.statusCode = 200;
+RestContext.response.responseBody =
+    Blob.valueOf(
+        JSON.serializePretty(
+            buildBenefitPackageSubscriptionResponse(
+                agentRequest.communication_subscriptions.benefit_packages
+            ),
+            true
+        )
+    );
 
-Retorno
-{
-    "last_name": "Doe",
-    "first_name": "John",
-    "email": "jonathan.doe@mail.com",
-    "communication_subscriptions": {
-        "email": true
-    }
-}
+private static void updateBenefitPackageSubscription(
+    Id accountId,
+    Id contactId,
+    Boolean isSubscribed
+) {
 
-porém esse retorno deveria ser 
-{
-  "communication_subscriptions": {
-    "benefit_packages": true
-  }
-}
-conforme a especificação
-além disso quando eu tento criar de novo ele retorna 
-{
-    "last_name": "Doe",
-    "first_name": "John",
-    "email": "jonathan.doe@mail.com",
-    "communication_subscriptions": {
-        "email": true
-    }
-}
-como se eu tivesse criado dois, quando poderia dizer que o usuário já está com o 
-  "communication_subscriptions": {
-    "benefit_packages": true
-  }
-ou seja que já existe um registro desse criado
-
-quando passo o 
-  "communication_subscriptions": {
-    "benefit_packages": false
-  }
-ele executa a deleção, porém retorna 
-
-{
-    "last_name": "Doe",
-    "first_name": "John",
-    "email": "jonathan.doe@mail.com",
-    "communication_subscriptions": {
-        "email": true
-    }
-}
-
-quando deveria retornar 
-  "communication_subscriptions": {
-    "benefit_packages": false
-  }
-conforme a espeficiação
-
------------------------
-
-    private static void handlePatch() {
-        try {
-            RestContext.response.addHeader('Content-Type', 'application/json');
-
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext.request,
-                new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
-                }
-            );
-
-            String requestUri = RestContext.request.requestURI;
-            String bankId = requestUri.substringBetween('/banks/', '/agents/');
-            String agentId = requestUri.substringAfter('/agents/');
-
-            String requestBody = RestContext.request.requestBody.toString().trim();
-            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
-            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
-
-            if (String.isBlank(bankId) || String.isBlank(agentId)) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'The input information received were not compliant with the endpoint specification.');
-            }
-
-            AgentData agentRequest = (AgentData) JSON.deserializeStrict(requestBody, AgentData.class);
-
-            List<Contact> agentRecords = [SELECT Id, AccountId, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
-
-            if (agentRecords.isEmpty()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not Found', 'The searched resource was not found.');
-            }
-
-            Contact agent = agentRecords[0];
-
-            if (agentRequest.communication_subscriptions != null &&
-                agentRequest.communication_subscriptions.benefit_packages != null) {
-
-                updateBenefitPackageSubscription(bankId, agent.Id, agentRequest.communication_subscriptions.benefit_packages);
-            }
-
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agent), true));
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-
-            if (ex.status_code == 401) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
-            } else if (ex.status_code == 403) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
-            } else {
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage(
-                            String.valueOf(ex.status_code),
-                            ex.error,
-                            ex.error_description
-                        )
-                    )
-                );
-            }
-
-        } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error updating agent information.')));
-        }
-    }
-
-    private static Communication_Subscription__c getCommunicationSubscription(Id contactId, String channel, String relatedTo) {
-        List<Communication_Subscription__c> subscriptions;
-        if (channel == CHANNEL_EMAIL) {
-            subscriptions = [SELECT Id, Channel__c, Related_To__c 
-                FROM Communication_Subscription__c 
-                WHERE Contact__c = :contactId 
-                AND Channel__c = :channel LIMIT 1];
-        } else {
-            subscriptions = [SELECT Id, Channel__c, Related_To__c 
-                FROM Communication_Subscription__c 
-                WHERE Contact__c = :contactId 
-                AND Channel__c = :channel 
-                AND Related_To__c = :relatedTo LIMIT 1];
-        }
-        return subscriptions.isEmpty() ? null : subscriptions[0];
-    }
-
-    private static AgentData buildAgentResponse(Contact agent) {
-        AgentData response = new AgentData();
-        response.first_name = agent.FirstName;
-        response.last_name = agent.LastName;
-        response.email = agent.Email;
-
-        Communication_Subscription__c emailSubscription = getCommunicationSubscription(agent.Id, CHANNEL_EMAIL, null);
-
-        if (emailSubscription != null) {
-            response.communication_subscriptions = new CommunicationSubscriptions();
-            response.communication_subscriptions.email = true;
-        }
-
-        return response;
-    }
-
-    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean isSubscribed) {
-
-        Communication_Subscription__c subscription = getCommunicationSubscription(contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
-
-        if (isSubscribed) {
-            if (subscription == null) {
-                createCommunicationSubscription(accountId, contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
-            }
-        } else if (subscription != null) {
-            delete subscription;
-        }
-    }
-
-    private static void createCommunicationSubscription(Id accountId, Id contactId, String channel, String relatedTo) {
-        Communication_Subscription__c communicationSubscription = 
-            new Communication_Subscription__c(
-                Customer__c = accountId,
-                Contact__c = contactId,
-                Channel__c = channel
+    Communication_Subscription__c subscription =
+        getCommunicationSubscription(
+            contactId,
+            CHANNEL_PUSH_NOTIFICATION,
+            RELATED_TO_BENEFIT_PACKAGE
         );
 
-        if(String.isNotBlank(relatedTo)) {
-            communicationSubscription.Related_To__c = relatedTo;
-        }
-
-        insert communicationSubscription;
+    if (isSubscribed && subscription == null) {
+        createCommunicationSubscription(
+            accountId,
+            contactId,
+            CHANNEL_PUSH_NOTIFICATION,
+            RELATED_TO_BENEFIT_PACKAGE
+        );
+        return;
     }
 
-    public class AgentData {
-        public String first_name {
-            get {
-                return first_name;
-            }
-            set {
-                WebportalApiUtility_v1.validateMaxLength(value, 40, 'first_name');
-                first_name = value;
-            }
-        }
-
-        public String last_name {
-            get {
-                return last_name;
-            }
-            set {
-                WebportalApiUtility_v1.validateMaxLength(value, 80, 'last_name');
-                last_name = value;
-            }
-        }
-        public String email {
-            get {
-                return email;
-            }
-            set {
-                if (!WebportalApiUtility_v1.isValidEmail(value)) {
-                    throw new WebportalApiUtility_v1.RequestAPIException(
-                        400, 'Bad Request', 'Invalid request body. Invalid format: email'
-                    );
-                }
-
-                email = value;
-            }
-        }
-        public CommunicationSubscriptions communication_subscriptions;
+    if (!isSubscribed && subscription != null) {
+        delete subscription;
     }
-    
-    public class CommunicationSubscriptions{
-        public Boolean email;
-        public Boolean benefit_packages;
-    }
+}
