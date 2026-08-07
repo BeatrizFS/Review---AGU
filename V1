@@ -1,93 +1,47 @@
 @isTest
-static void testSuccessPOSTWithEmailSubscription() {
+static void testSuccessGETWithEmailSubscription() {
 
     Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+    Contact agent = [SELECT Id FROM Contact WHERE AccountId = :bank.Id LIMIT 1];
+
+    insert new Communication_Subscription__c(
+        Customer__c = bank.Id,
+        Contact__c = agent.Id,
+        Channel__c = 'EMAIL'
+    );
 
     RestContext.request = new RestRequest();
-    RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
-    RestContext.request.httpMethod = 'POST';
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' +
+        bank.Id +
+        '/agents/' +
+        agent.Id;
+    RestContext.request.httpMethod = 'GET';
     RestContext.request.headers.put('authorization2', 'Bearer ' + token);
-
-    RestContext.request.requestBody = Blob.valueOf(
-        '{' +
-        '"first_name":"Maria",' +
-        '"last_name":"Silva",' +
-        '"email":"maria.subscription@test.com",' +
-        '"communication_subscriptions":{' +
-            '"email":true' +
-        '}' +
-        '}'
-    );
 
     RestContext.response = new RestResponse();
 
     Test.startTest();
-    WebportalSalesBanksAgents_VEXP.doPost();
+    WebportalSalesBanksAgents_VEXP.doGet();
     Test.stopTest();
 
-    System.assertEquals(200, RestContext.response.statusCode);
-
-    Contact contact = [
-        SELECT Id, AccountId
-        FROM Contact
-        WHERE Email = 'maria.subscription@test.com'
-        LIMIT 1
-    ];
-
-    List<Communication_Subscription__c> subscriptions = [
-        SELECT Customer__c, Contact__c, Channel__c
-        FROM Communication_Subscription__c
-        WHERE Contact__c = :contact.Id
-    ];
-
-    System.assertEquals(1, subscriptions.size());
-    System.assertEquals(bank.Id, subscriptions[0].Customer__c);
-    System.assertEquals(contact.Id, subscriptions[0].Contact__c);
-    System.assertEquals('EMAIL', subscriptions[0].Channel__c);
-}
-
-@isTest
-static void testSuccessPOSTWithoutEmailSubscription() {
-
-    Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
-
-    RestContext.request = new RestRequest();
-    RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
-    RestContext.request.httpMethod = 'POST';
-    RestContext.request.headers.put('authorization2', 'Bearer ' + token);
-
-    RestContext.request.requestBody = Blob.valueOf(
-        '{' +
-        '"first_name":"Maria",' +
-        '"last_name":"Silva",' +
-        '"email":"maria.nosubscription@test.com",' +
-        '"communication_subscriptions":{' +
-            '"email":false' +
-        '}' +
-        '}'
-    );
-
-    RestContext.response = new RestResponse();
-
-    Test.startTest();
-    WebportalSalesBanksAgents_VEXP.doPost();
-    Test.stopTest();
+    WebportalSalesBanksAgents_VEXP.AgentData response =
+        (WebportalSalesBanksAgents_VEXP.AgentData)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalSalesBanksAgents_VEXP.AgentData.class
+            );
 
     System.assertEquals(200, RestContext.response.statusCode);
-
-    Contact contact = [
-        SELECT Id
-        FROM Contact
-        WHERE Email = 'maria.nosubscription@test.com'
-        LIMIT 1
-    ];
-
-    System.assertEquals(
-        0,
-        [
-            SELECT COUNT()
-            FROM Communication_Subscription__c
-            WHERE Contact__c = :contact.Id
-        ]
-    );
+    System.assertNotEquals(null, response.communication_subscriptions);
+    System.assertEquals(true, response.communication_subscriptions.email);
 }
+
+System.assertEquals(
+    null,
+    response.communication_subscriptions
+);
+
+System.assert(
+    response.communication_subscriptions == null
+);
