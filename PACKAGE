@@ -1,44 +1,18 @@
-    public static Map<String, Integer> validatePaginationQueryParams(Map<String, String> requestPaginationParams, Integer standardMaxResults) {
-        Map<String, Integer> paginationParams = new Map<String, Integer> {
-            'start_index' => 0,
-            'max_results' => standardMaxResults
-        };
+List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
 
-        if(requestPaginationParams.containsKey('max_results')) {
-            if(String.isBlank(requestPaginationParams.get('max_results')) || !requestPaginationParams.get('max_results').isNumeric()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: max_results. Value must be non-empty, a valid number, and greater than or equal to 0.');
-            }
+if (!benefitPackages.isEmpty()) {
+    paginatedBenefitPackages = WebportalApiUtility_v1.getPaginatedSObject(
+        benefitPackages,
+        paginationParams.get('start_index'),
+        paginationParams.get('max_results'),
+        benefitPackages.size()
+    );
+}
 
-            if(Integer.valueOf(requestPaginationParams.get('max_results')) < standardMaxResults) {
-                paginationParams.put('max_results', Integer.valueOf(requestPaginationParams.get('max_results')));
-            }
-        }
-
-        if(requestPaginationParams.containsKey('start_index')) {
-            if(String.isBlank(requestPaginationParams.get('start_index')) || !requestPaginationParams.get('start_index').isNumeric()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: start_index. Value must be non-empty, a valid number, and greater than or equal to 0.');
-            }
-
-            paginationParams.put('start_index', Integer.valueOf(requestPaginationParams.get('start_index')));
-        }
-
-        return paginationParams;
-    }
-
-    public static List<SObject> getPaginatedSObject(List<SObject> objectList, Integer startIndex, Integer maxResults, Integer size) {
-        List<SObject> paginatedSObject = new List<SObject>();
-
-        if(size < startIndex) {
-            return paginatedSObject;
-        } else if(size > maxResults && size > (startIndex + maxResults)) {
-            for(Integer i = startIndex; i < (startIndex + maxResults); i++) {
-                paginatedSObject.add(objectList[i]);
-            }
-        } else {
-            for(Integer i = startIndex; i < size; i++) {
-                paginatedSObject.add(objectList[i]);
-            }
-        }
-
-        return paginatedSObject;
-    }
+RestContext.response.statusCode = 200;
+RestContext.response.responseBody = Blob.valueOf(
+    JSON.serializePretty(
+        buildBenefitPackageListResponse(paginatedBenefitPackages),
+        true
+    )
+);
