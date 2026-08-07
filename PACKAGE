@@ -1,0 +1,173 @@
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class VOBPSalesBenefitPackages_V1 {
+
+    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
+        'product_reference',
+        'active_start_at',
+        'active_end_at',
+        'amount_of_policies',
+        'core_benefits',
+        'optional_benefits',
+        'legal_consents'
+    };
+
+    @HttpPost
+    global static void doPost() {
+        handlePost();
+    }
+
+    private static void handlePost() {
+        try{
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                    'urn:axa.partners.benefits_platform.write'
+                }
+            );
+
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
+            BenefitPackage benefitPackageRequest = (BenefitPackage)JSON.deserializeStrict(requestBody, BenefitPackage.class);
+
+            ServiceContract contract = buildServiceContract(benefitPackageRequest);
+
+            insert contract;
+
+            //ContractLineItem
+            
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+        } catch (JSONException ex) {
+            RestContext.response.statusCode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating benefit package.')));
+        }
+
+    }
+
+    private static Product__c getProductByReference(String productReference){
+        List<Product__c> products = [SELECT Id FROM Product__c WHERE Key__c = :productReference LIMIT 1];
+        if(products.isEmpty()){
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Product with reference ' + productReference + ' not found.');
+        }
+        return products[0];
+    }
+
+    private static ServiceContract buildServiceContract(BenefitPackage request){
+        ServiceContract contract = new ServiceContract();
+        contract.Name = '-';
+        contract.Product_Reference__c = request.product_reference;
+        //contract.Product__c = getProductByReference(request.product_reference).Id;
+        contract.StartDate = request.active_start_at;
+        contract.EndDate = request.active_end_at;
+        //contract.Term - Whole months between `StartDate` and `EndDate`;
+        contract.Amount_of_Policies__c = request.amount_of_policies;
+
+        if(request.affected_policy_range != null){
+            contract.Policy_Range_Start__c = request.affected_policy_range.external_number_start_at;
+            contract.Policy_Range_End__c = request.affected_policy_range.external_number_end_at;
+        }
+
+        populateLegalConsents(contract, request);
+
+        return contract;
+    }
+
+
+    private static void populateLegalConsents(ServiceContract contract, BenefitPackage request) {
+        if (request.legal_consents != null && !request.legal_consents.isEmpty()) {
+            
+            LegalConsentItem consent = request.legal_consents[0];
+
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+                contract,
+                'Legal_Consent_Code__c',
+                consent.code,
+                false
+            );
+
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+                contract,
+                'Legal_Consent_Confirmed__c',
+                consent.is_confirmed != null ? consent.is_confirmed :
+                false
+            );
+
+            String consentedAt = consent.consented_at;
+
+            if (consentedAt != null && consentedAt.contains('T') && consentedAt.contains('Z')) {
+                consentedAt = consentedAt.replace('T', ' ');
+                consentedAt = consentedAt.replace('Z', '');
+            }
+
+            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+                contract,
+                'Legal_Consent_Date__c',
+                consentedAt != null ? Datetime.valueOfGmt(consentedAt) : null,
+                false
+            );        
+        }
+    }
+
+    public class BenefitPackage {
+        public String benefit_package_id; 
+        public String product_reference; 
+        public Date active_start_at; 
+        public Date active_end_at; 
+        public Integer amount_of_policies;
+        public AffectedPolicyRange affected_policy_range;
+        public List<CoreBenefit> core_benefits;
+        public List<OptionalBenefit> optional_benefits;
+        public List<LegalConsentItem> legal_consents;
+    }
+
+    public class AffectedPolicyRange {
+        public String external_number_start_at;
+        public String external_number_end_at;
+    }
+
+    public class CoreBenefit {
+        public String benefit_id; 
+        public String name;
+    }
+
+    public class OptionalBenefit {
+        public String benefit_id;
+        public String name; 
+        public String description;
+    }
+
+    public class LegalConsentItem {
+        public String code;
+        public Boolean is_confirmed;
+        public String consented_at;
+    }
+
+    public class BenefitPackagePostResponse {
+        public String benefit_package_id;
+    }
+}
