@@ -1,34 +1,142 @@
-private static void handleGetDetails() {
+private static BenefitPackage buildBenefitPackageResponse(
+    ServiceContract contract,
+    AffectedPolicyRange affectedPolicyRange,
+    List<CoreBenefit> coreBenefits,
+    List<OptionalBenefit> optionalBenefits,
+    List<LegalConsentItem> legalConsents
+) {
 
-    RestContext.response.addHeader('Content-Type','application/json');
+    BenefitPackage response = new BenefitPackage();
 
-    try {
+    response.benefit_package_id = contract.Id;
+    response.product_reference = contract.Product_Reference__c;
+    response.active_start_at = contract.StartDate;
+    response.active_end_at = contract.EndDate;
+    response.amount_of_policies = Integer.valueOf(contract.Amount_of_Policies__c);
 
-        authenticate();
+    response.affected_policy_range = affectedPolicyRange;
+    response.core_benefits = coreBenefits;
+    response.optional_benefits = optionalBenefits;
+    response.legal_consents = legalConsents;
 
-        Id benefitPackageId = getBenefitPackageId();
-
-        ServiceContract contract = getBenefitPackage(benefitPackageId);
-
-        if(contract == null){
-            throw new WebportalApiUtility_v1.RequestAPIException(
-                404,
-                'not_found',
-                'Benefit package not found.'
-            );
-        }
-
-        BenefitPackage response =
-            buildBenefitPackageResponse(contract);
-
-        RestContext.response.statusCode = 200;
-        RestContext.response.responseBody =
-            Blob.valueOf(JSON.serializePretty(response,true));
-
-    }
-    catch(...){
-
-    }
-
+    return response;
 }
+
+ServiceContract contract = getBenefitPackage(benefitPackageId);
+
+AffectedPolicyRange affectedPolicyRange =
+    buildAffectedPolicyRange(contract);
+
+List<CoreBenefit> coreBenefits =
+    buildCoreBenefits(contract);
+
+List<OptionalBenefit> optionalBenefits =
+    buildOptionalBenefits(contract);
+
+List<LegalConsentItem> legalConsents =
+    buildLegalConsents(contract);
+
+BenefitPackage response =
+    buildBenefitPackageResponse(
+        contract,
+        affectedPolicyRange,
+        coreBenefits,
+        optionalBenefits,
+        legalConsents
+    );
+
+private static AffectedPolicyRange buildAffectedPolicyRange(ServiceContract contract) {
+
+    AffectedPolicyRange response = new AffectedPolicyRange();
+
+    response.external_number_start_at = contract.External_Number_Start_At__c;
+    response.external_number_end_at = contract.External_Number_End_At__c;
+
+    return response;
+}
+
+no get
+
+AffectedPolicyRange affectedPolicyRange =
+    buildAffectedPolicyRange(contract);
+
+BenefitPackage response = buildBenefitPackageResponse(
+    contract,
+    affectedPolicyRange,
+    coreBenefits,
+    optionalBenefits,
+    legalConsents
+);
+
+private static List<MN_Product_Benefit__c> getProductBenefits(Id productVersionId) {
+    return [
+        SELECT
+            Benefit__r.Benefit_Record_Type__c,
+            Benefit__r.Name,
+            Benefit__r.Benefit_Description__c,
+            Benefit__r.External_Reference__c
+        FROM MN_Product_Benefit__c
+        WHERE Product__c = :productVersionId
+            AND Benefit__r.Benefit_Record_Type__c != null
+            AND Benefit__r.Web_Portal__c = true
+            AND Benefit__r.Active__c = true
+    ];
+}
+
+private static List<CoreBenefit> buildCoreBenefits(
+    List<MN_Product_Benefit__c> productBenefits
+) {
+    List<CoreBenefit> response = new List<CoreBenefit>();
+
+    for (MN_Product_Benefit__c productBenefit : productBenefits) {
+
+        CoreBenefit benefit = new CoreBenefit();
+
+        benefit.benefit_id = productBenefit.Benefit__r.Benefit_Record_Type__c;
+        benefit.name = productBenefit.Benefit__r.Name;
+
+        response.add(benefit);
+    }
+
+    return response;
+}
+
+private static List<OptionalBenefit> buildOptionalBenefits(
+    List<MN_BINRange_Benefit__c> optionalBenefits
+) {
+    List<OptionalBenefit> response = new List<OptionalBenefit>();
+
+    for (MN_BINRange_Benefit__c optionalBenefit : optionalBenefits) {
+
+        OptionalBenefit benefit = new OptionalBenefit();
+
+        benefit.benefit_id = optionalBenefit.Benefit__r.Benefit_Record_Type__c;
+        benefit.name = optionalBenefit.Benefit__r.Name;
+        benefit.description = optionalBenefit.Benefit__r.Benefit_Description__c;
+
+        response.add(benefit);
+    }
+
+    return response;
+}
+
+private static ServiceContract getBenefitPackage(Id benefitPackageId)
+
+private static List<MN_Product_Benefit__c> getCoreBenefitRecords(ServiceContract benefitPackage)
+
+private static List<MN_BINRange_Benefit__c> getOptionalBenefitRecords(ServiceContract benefitPackage)
+
+private static Set<String> getBenefitsToExclude(ServiceContract benefitPackage)
+
+private static List<Legal_Consent__c> getLegalConsents(ServiceContract benefitPackage)
+
+private static BenefitPackage buildBenefitPackageResponse(...)
+
+private static AffectedPolicyRange buildAffectedPolicyRange(...)
+
+private static List<CoreBenefit> buildCoreBenefits(...)
+
+private static List<OptionalBenefit> buildOptionalBenefits(...)
+
+private static List<LegalConsentItem> buildLegalConsents(...)
 
