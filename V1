@@ -1,35 +1,33 @@
 @isTest
-static void testSuccessPATCHDeleteBenefitPackageSubscription() {
+static void testSuccessPATCHDeleteBenefitPackageSubscriptionAlreadyDeleted() {
 
-    Contact agent = [
-        SELECT Id, AccountId
-        FROM Contact
-        WHERE Account.RecordType.DeveloperName = 'Bank'
+    Account bank = [
+        SELECT Id,
+               (SELECT Id FROM Contacts LIMIT 1)
+        FROM Account
+        WHERE RecordType.DeveloperName = 'Bank'
         LIMIT 1
     ];
 
-    insert new Communication_Subscription__c(
-        Customer__c = agent.AccountId,
-        Contact__c = agent.Id,
-        Channel__c = 'PUSH_NOTIFICATION',
-        Related_To__c = 'BENEFIT_PACKAGES'
-    );
+    Contact agent = bank.Contacts[0];
+
+    // Garante que não existe subscription
+    delete [
+        SELECT Id
+        FROM Communication_Subscription__c
+        WHERE Contact__c = :agent.Id
+        AND Channel__c = 'PUSH_NOTIFICATION'
+        AND Related_To__c = 'BENEFIT_PACKAGES'
+    ];
 
     RestContext.request = new RestRequest();
     RestContext.request.requestURI =
-        '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' +
-        agent.AccountId +
-        '/agents/' +
-        agent.Id;
+        '/sales/enterprise/transversal/benefits_configuration/vexp/banks/'
+        + bank.Id + '/agents/' + agent.Id;
     RestContext.request.httpMethod = 'PATCH';
     RestContext.request.headers.put('authorization2', 'Bearer ' + token);
-
     RestContext.request.requestBody = Blob.valueOf(
-        '{' +
-            '"communication_subscriptions":{' +
-                '"benefit_packages":false' +
-            '}' +
-        '}'
+        '{"communication_subscriptions":{"benefit_packages":false}}'
     );
 
     RestContext.response = new RestResponse();
@@ -40,26 +38,103 @@ static void testSuccessPATCHDeleteBenefitPackageSubscription() {
 
     System.assertEquals(200, RestContext.response.statusCode);
 
-    System.assertEquals(
-        0,
-        [
-            SELECT COUNT()
-            FROM Communication_Subscription__c
-            WHERE Contact__c = :agent.Id
-            AND Channel__c = 'PUSH_NOTIFICATION'
-            AND Related_To__c = 'BENEFIT_PACKAGES'
-        ]
-    );
+    Integer countSubscriptions = [
+        SELECT COUNT()
+        FROM Communication_Subscription__c
+        WHERE Contact__c = :agent.Id
+        AND Channel__c = 'PUSH_NOTIFICATION'
+        AND Related_To__c = 'BENEFIT_PACKAGES'
+    ];
+
+    System.assertEquals(0, countSubscriptions);
 
     WebportalSalesBanksAgents_VEXP.BenefitPackageSubscriptionResponse response =
         (WebportalSalesBanksAgents_VEXP.BenefitPackageSubscriptionResponse)
-            JSON.deserialize(
-                RestContext.response.responseBody.toString(),
-                WebportalSalesBanksAgents_VEXP.BenefitPackageSubscriptionResponse.class
-            );
+        JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalSalesBanksAgents_VEXP.BenefitPackageSubscriptionResponse.class
+        );
 
-    System.assertEquals(
-        false,
-        response.communication_subscriptions.benefit_packages
+    System.assertEquals(false, response.communication_subscriptions.benefit_packages);
+}
+
+@isTest
+static void testFailAgentNotFoundPATCH() {
+
+    Account bank = [
+        SELECT Id
+        FROM Account
+        WHERE RecordType.DeveloperName = 'Bank'
+        LIMIT 1
+    ];
+
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/banks/'
+        + bank.Id + '/agents/003000000000000AAA';
+    RestContext.request.httpMethod = 'PATCH';
+    RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+    RestContext.request.requestBody = Blob.valueOf(
+        '{"communication_subscriptions":{"benefit_packages":true}}'
     );
+
+    RestContext.response = new RestResponse();
+
+    Test.startTest();
+    WebportalSalesBanksAgents_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(404, RestContext.response.statusCode);
+}
+
+@isTest
+static void testFailEmptyIdsPATCH() {
+
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/banks//agents/';
+    RestContext.request.httpMethod = 'PATCH';
+    RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+    RestContext.request.requestBody = Blob.valueOf(
+        '{"communication_subscriptions":{"benefit_packages":true}}'
+    );
+
+    RestContext.response = new RestResponse();
+
+    Test.startTest();
+    WebportalSalesBanksAgents_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+}
+
+@isTest
+static void testUnauthorizedPATCH() {
+
+    Account bank = [
+        SELECT Id,
+               (SELECT Id FROM Contacts LIMIT 1)
+        FROM Account
+        WHERE RecordType.DeveloperName = 'Bank'
+        LIMIT 1
+    ];
+
+    Contact agent = bank.Contacts[0];
+
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/banks/'
+        + bank.Id + '/agents/' + agent.Id;
+    RestContext.request.httpMethod = 'PATCH';
+    RestContext.request.requestBody = Blob.valueOf(
+        '{"communication_subscriptions":{"benefit_packages":true}}'
+    );
+
+    RestContext.response = new RestResponse();
+
+    Test.startTest();
+    WebportalSalesBanksAgents_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(401, RestContext.response.statusCode);
 }
