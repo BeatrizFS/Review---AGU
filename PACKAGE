@@ -1,18 +1,243 @@
-List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
+    private void getList(Account existingCustomer,WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData) {
+        
+        List<SmartContractGet> response = new List<SmartContractGet>();
+        List<Trip_Assistance__c> allContracts = new List<Trip_Assistance__c>();
+        
+        String creditCardToken = RestContext.request.params.get('credit_card_token');
+		String bankIdentificationNumber = RestContext.request.params.get('bank_identification_number');
+        String contractId;
+        
+        if (RestContext.request.params.get('credit_card_token') != null) {
+            WebportalApiUtility_v1.validateCreditCardToken(creditCardToken, false);
+            contractId = creditCardToken;
+        } else if (RestContext.request.params.get('bank_identification_number') != null) {
+            WebportalApiUtility_v1.validateBinNumber(bankIdentificationNumber, false);
+            contractId = bankIdentificationNumber;
+        }
+        
+        if (String.isNotBlank(contractId)) {
+                                    
+            WebportalAPITokenAuthentication_v1.validateAccountAccess(existingCustomer.Id, creditCardToken, bankIdentificationNumber);
+            
+            allContracts = [
+                SELECT Id, Name, Status__c, Trip_Start_Date__c, Trip_End_Date__c, 
+                MN_Account_BIN__r.Credit_Card_Token__c, Country_of_Origin__c, Country_of_Destination__c
+                FROM Trip_Assistance__c 
+                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CERTIFICATE' 
+                AND (MN_Account_BIN__r.Credit_Card_Token__c =: contractId OR MN_Account_BIN__r.BIN__r.BIN_Number__c =: contractId)];
+            
+        } else {
+            allContracts = [
+                SELECT Id, Name, Status__c, Trip_Start_Date__c, Trip_End_Date__c, 
+                MN_Account_BIN__r.Credit_Card_Token__c, Country_of_Origin__c, Country_of_Destination__c
+                FROM Trip_Assistance__c 
+                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CERTIFICATE'];
+        }
+        
+        if (allContracts.isEmpty()) {
+            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, JSON.serializePretty(response, true));
+            ModelUtility.EncryptedData encryptObj =  new ModelUtility.EncryptedData();
+            encryptObj.encrypted_data = encryptedResponse;
+            
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
+        } else {
+            Map<String, String> requestParams = RestContext.request.params;
+            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
+        
+            Integer totalSize = allContracts.size();
+            List<Trip_Assistance__c> paginatedContracts = WebportalApiUtility_v1.getPaginatedSObject(
+                allContracts, 
+                paginationParams.get('start_index'), 
+                paginationParams.get('max_results'), 
+                totalSize
+            );
+    private static void handleGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        String customerId = RestContext.request.requestURI.substringBetween( '/customers/', '/notifications');
+        Map<String, String> params = RestContext.request.params;
+        Map<String, Integer> validatedPaginatedParams;      
 
-if (!benefitPackages.isEmpty()) {
-    paginatedBenefitPackages = WebportalApiUtility_v1.getPaginatedSObject(
-        benefitPackages,
-        paginationParams.get('start_index'),
-        paginationParams.get('max_results'),
-        benefitPackages.size()
-    );
-}
+        Boolean hasBeenAuthenticated = isAuthenticated(customerId, new Set<string>{'urn:axa.partners.specific.visagateway.customers.read_only','urn:axa.partners.specific.visagateway.customers.write'} );
+        if( hasBeenAuthenticated || Test.isRunningTest()) {
 
-RestContext.response.statusCode = 200;
-RestContext.response.responseBody = Blob.valueOf(
-    JSON.serializePretty(
-        buildBenefitPackageListResponse(paginatedBenefitPackages),
-        true
-    )
-);
+            if( String.isBlank( customerId ) ) {
+                RestContext.response.statuscode = 400;
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400','bad_request', 'Empty Customer Id')));
+            } else if( !WebportalApiUtility_v1.isValidCustomerID(customerId) ) {
+                RestContext.response.statuscode = 400;
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400','bad_request', 'Invalid Customer Id')));
+            } else {
+                Boolean areValidParams = true;
+                try {
+                    validateGetParams(params);
+                    validatedPaginatedParams = WebportalApiUtility_v1.validatePaginationQueryParams(params, 15);
+                } catch( WebportalApiUtility_v1.RequestAPIException ex ) {
+                    RestContext.response.statuscode = ex.status_code;
+                    RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error,  ex.error_description)));
+                    areValidParams = false;
+                }
+
+                if(areValidParams) {
+                    Boolean isArchived = false;
+                    Boolean isRead = false;
+                    String relatedTo;
+
+                    isArchived = params.containsKey('was_archived') ? Boolean.valueOf( params.get('was_archived') ) : false;
+                    isRead  = params.containsKey('was_read') ? Boolean.valueOf(params.get('was_read') ) : false;
+                    relatedTo = params.containsKey('related_to') ? (String) params.get('related_to') : null;
+
+                    String notificationId = RestContext.request.requestURI.substringAfter('/notifications/');
+
+                    String query = 'Select Id, Customer__c, Claim__c, Certificate__c, Travel__c, Title__c, Is_Archived__c, Is_Read__c, Related_to__c, Content__c, CreatedDate from Customer_Notification__c where Customer__r.Customer_Identifier__c = :customerId';
+
+                    if( String.isBlank( notificationId ) ) {
+                        query += isArchived ? ' AND Is_Archived__c = true' : (params.containsKey('was_archived') ? ' AND Is_Archived__c = false' : '');
+                        query += isRead ? ' AND Is_Read__c = true' : ( params.containsKey('was_read') ? ' AND Is_Read__c = false' : '');
+                        query += relatedTo != null ? ' AND Related_to__c = :relatedTo' : '';
+                        query += ' ORDER BY CreatedDate DESC';
+
+                        List<Customer_Notification__c> customerNotifications = Database.query(query);
+                        List<Customer_Notification__c> paginatedNotifications = WebportalApiUtility_v1.getPaginatedSObject(customerNotifications, validatedPaginatedParams.get('start_index'), validatedPaginatedParams.get('max_results'), customerNotifications.size());
+
+                        List<OtherNotificationSummary> notifications = new List<OtherNotificationSummary>();
+                        for( Customer_Notification__c customerNotification : paginatedNotifications ) {
+                            notifications.add( getNotificationSummary(customerNotification) );
+                        }
+
+                        RestContext.response.statuscode = 206;
+                        RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(validatedPaginatedParams.get('start_index'), paginatedNotifications.size(), customerNotifications.size()));
+                        RestContext.response.responseBody = Blob.valueOf( JSON.serializePretty(  notifications, true ) );
+                    } else {
+                        if( !WebportalApiUtility_v1.isValidSalesforceID( notificationId ) ) {
+                            RestContext.response.statuscode = 400;
+                            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400','bad_request', 'Invalid Notification Id')));
+                        } else {
+
+            if (String.isNotBlank(smartContractIdFromURL)) {
+                if (smartContractIdFromURL.length() > 18) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Invalid request parameter. Out of bounds (18): smart_contract_id');
+                }
+
+                getDetails(smartContractIdFromURL, existingCustomer, accessTokenData);
+            } else {
+                getList(existingCustomer, accessTokenData);
+            }
+        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statuscode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error, ex.error_description)
+            ));
+        } catch(Exception ex) {
+            System.debug(Logginglevel.ERROR, 'Unexpected error creating the request: ' + ex.getMessage());
+            System.debug(Logginglevel.ERROR, 'Error Line: ' + ex.getLineNumber());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage('500', 'Internal Server Error', 'Unexpected error creating the request: ' + ex.getMessage())
+            ));
+        }
+    }
+
+    private void getList(Account existingCustomer,WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData) {        
+        List<SimplifiedSmartContractGet> response = new List<SimplifiedSmartContractGet>();
+        List<Trip_Assistance__c> allContracts = new List<Trip_Assistance__c>();
+
+        String creditCardToken = RestContext.request.params.get('credit_card_token');
+        String bankIdentificationNumber = RestContext.request.params.get('bank_identification_number');
+        String contractId;        
+        
+        if (RestContext.request.params.get('credit_card_token') != null) {
+            WebportalApiUtility_v1.validateCreditCardToken(creditCardToken, false);
+            contractId = creditCardToken;
+        } else if (RestContext.request.params.get('bank_identification_number') != null) {
+            WebportalApiUtility_v1.validateBinNumber(bankIdentificationNumber, false);
+            contractId = bankIdentificationNumber;
+        }
+        
+        if (String.isNotBlank(contractId)) {
+                                                 
+            WebportalAPITokenAuthentication_v1.validateAccountAccess(existingCustomer.Id, creditCardToken, bankIdentificationNumber);
+            
+            allContracts = [
+                SELECT Id, Name, Status__c, Request_Additional_Docs_Message__c, 
+                Travel_Purchase_Date__c, Claim_Type__c, Claim_JSON__c, CreatedDate
+                FROM Trip_Assistance__c 
+                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CLAIM' 
+                AND (MN_Account_BIN__r.Credit_Card_Token__c =: contractId OR MN_Account_BIN__r.BIN__r.BIN_Number__c =: contractId)
+            ];
+            
+        } else {
+            allContracts = [
+                SELECT Id, Name, Status__c, Request_Additional_Docs_Message__c, 
+                Travel_Purchase_Date__c, Claim_Type__c, Claim_JSON__c, CreatedDate
+                FROM Trip_Assistance__c 
+                WHERE Account__c =: existingCustomer.Id AND Type__c = 'CLAIM'
+            ];
+        } 
+        
+        if (allContracts.isEmpty()) {
+            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, JSON.serializePretty(response, true));
+            ModelUtility.EncryptedData encryptObj = new ModelUtility.EncryptedData();
+            encryptObj.encrypted_data = encryptedResponse;
+            
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
+        } else {
+            Map<String, Trip_Assistance_Claim_Config__mdt> benefitConfigMap = new Map<String, Trip_Assistance_Claim_Config__mdt>();
+            List<Trip_Assistance_Claim_Config__mdt> benefitConfigs = [SELECT Id, DeveloperName, Name_of_Custom_Data_Object__c, Properties_to_Remove__c FROM Trip_Assistance_Claim_Config__mdt];
+
+            for (Trip_Assistance_Claim_Config__mdt iterator : benefitConfigs) {
+                benefitConfigMap.put(iterator.DeveloperName, iterator);
+            }
+
+            Map<String, String> requestParams = RestContext.request.params;
+            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
+        
+            Integer totalSize = allContracts.size();
+            List<Trip_Assistance__c> paginatedContracts = WebportalApiUtility_v1.getPaginatedSObject(
+                allContracts, 
+                paginationParams.get('start_index'), 
+                paginationParams.get('max_results'), 
+                totalSize
+            );
+
+            Map<String,Object> responseMap = new Map<String,Object>();
+
+            for(Trip_Assistance__c iterator : paginatedContracts) {
+                SimplifiedSmartContractGet partResponseA = new SimplifiedSmartContractGet();
+                partResponseA.smart_contract_id = iterator.Id;
+                partResponseA.smart_contract_number = iterator.Name;
+                partResponseA.type = iterator.Claim_Type__c;
+                partResponseA.created_at = String.valueOf(iterator.CreatedDate.dateGmt());
+                partResponseA.travel_purchased_date = iterator.Travel_Purchase_Date__c != null ? String.valueOf(iterator.Travel_Purchase_Date__c) : null;
+                partResponseA.status = iterator.Status__c;
+
+                Map<String, Object> mergedResponse = (Map<String, Object>) JSON.deserializeUntyped(JSON.serialize(partResponseA));
+
+                if(String.isNotBlank(iterator.Claim_JSON__c) && String.isNotBlank(iterator.Claim_Type__c)) {
+                    Map<String, Object> partResponseB = parseJsonForListing(benefitConfigMap.get(iterator.Claim_Type__c), iterator.Claim_JSON__c);
+                    mergedResponse.putAll(partResponseB);
+                }
+
+                responseMap.put(partResponseA.smart_contract_id, mergedResponse);
+            }
+
+            List<String> parsedResponseBodyContent = new List<String>();
+            for(Object responseItemObject: responseMap.values()) {
+                String responseBody = JSON.serializePretty(responseItemObject, true);
+                parsedResponseBodyContent.add(responseBody);
+            }
+
+            String fullResponseBody = '[' + String.join(parsedResponseBodyContent, ',') + ']';
+
+            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, fullResponseBody.unescapeUnicode());
+            ModelUtility.EncryptedData encryptObj =  new ModelUtility.EncryptedData();
+            encryptObj.encrypted_data = encryptedResponse;
+
+            RestContext.response.statuscode = 200;
+            RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(paginationParams.get('start_index'), paginatedContracts.size(), allContracts.size()));
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
+        }
+    }
+
+Eu não tenho paramentro para fitrar Service Contract
