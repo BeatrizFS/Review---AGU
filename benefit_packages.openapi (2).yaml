@@ -1,0 +1,518 @@
+%YAML 1.2
+---
+openapi: 3.0.0
+x-format-version: "2.0"
+info:
+  title: Benefit packages resource
+  description: Endpoint definition
+  version: 1.0.0
+paths:
+  /sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages:
+    post:
+      x-satisfactory-response-time:
+        acg: 500
+      summary: Creates a benefit package resource.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/BenefitPackage"
+                - $ref: "#/components/schemas/EncryptedPayload"
+      responses:
+        "201":
+          description: Benefit package created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenefitPackagePostResponse"
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+    get:
+      x-satisfactory-response-time:
+        acg: 250
+      summary: Retrieves list of products package resource.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/StartIndex"
+        - $ref: "#/components/parameters/MaxResults"
+      responses:
+        "200":
+          description: Products information.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/BenefitPackageList"
+                  - $ref: "#/components/schemas/EncryptedPayload"
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only
+  /sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}:
+    get:
+      x-satisfactory-response-time:
+        acg: 250
+      summary: Retrieves detailed information of a products package resource.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/BenefitPackageId"
+      responses:
+        "200":
+          description: Products information.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/BenefitPackage"
+                  - $ref: "#/components/schemas/EncryptedPayload"
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only
+    patch:
+      x-satisfactory-response-time:
+        acg: 500
+      summary: Updates a benefit package resource.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/BenefitPackageId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/BenefitPackage"
+                - $ref: "#/components/schemas/EncryptedPayload"
+      responses:
+        "204":
+          description: Patch successfully done (No content returned).
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+  /sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}/cancel:
+    post:
+      x-satisfactory-response-time:
+        acg: 500
+      summary: Allow the consumer to validate that he wants to cancel a benefits package.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/BenefitPackageId"
+      responses:
+        "204":
+          description: Benefit package cancelled successfully (No content returned).
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+  /sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}/complete:
+    post:
+      x-satisfactory-response-time:
+        acg: 500
+      summary:
+        Allow the consumer to validate that he has finished to fill the benefit package
+        and that it is ready to await its active_start_at date.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/BenefitPackageId"
+      responses:
+        "204":
+          description: Benefit package completed successfully (No content returned).
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write
+servers:
+  - url: https://apis.axa-assistance.com
+components:
+  parameters:
+    StartIndex:
+      name: start_index
+      description: >
+        A number that specifies the starting point when paging through a list of
+        resources.
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    MaxResults:
+      name: max_results
+      description: |
+        The maximum number of results when paging through a list of resources.
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+    BenefitPackageId:
+      name: benefit_package_id
+      description: Identifier of the benefit package.
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 18
+        example: b09aac28-7f63
+  securitySchemes:
+    dev_visabenefits_acg:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://example-url-to-be-replaced.com/authorize
+          tokenUrl: https://example-url-to-be-replaced.com/oauth/token
+          scopes:
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write: Right to act on a benefit package
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only: Right to read a benefit package info
+    test_visabenefits_acg:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://example-url-to-be-replaced.com/authorize
+          tokenUrl: https://example-url-to-be-replaced.com/oauth/token
+          scopes:
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write: Right to act on a benefit package
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only: Right to read a benefit package info
+  schemas:
+    BenefitPackage:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          description: |
+            Status of the benefit package. It can be:
+              - ACTIVE: The benefit package is active.
+              - AWAITING_AGENT_SIGNATURE: The benefit package has been created and is awaiting the signature of the agent.
+              - AWAITING_START: The benefit package has been submitted and is awaiting its active_start_at date.
+              - CANCELLED: The benefit package has been cancelled by the agent.
+              - DRAFT: The benefit package has been created but not yet submited.
+              - EXPIRED: The active_end_at date has finished, and the benefit package is no longer active.
+          type: string
+          enum:
+            - ACTIVE
+            - AWAITING_AGENT_SIGNATURE
+            - AWAITING_START
+            - CANCELLED
+            - DRAFT
+            - EXPIRED
+          readOnly: true
+        benefit_package_id:
+          description: Identifier of the benefit package.
+          type: string
+          maxLength: 18
+          example: b09aac28-7f63
+          readOnly: true
+        product_reference:
+          description: Short and readable concatenation of information related to the product.
+          type: string
+          maxLength: 10
+          example: I_C_BR
+        active_start_at:
+          description: |
+            Date when the benefit package effect takes place.
+
+            N.B. If the date is in the past, it will be set to today.
+
+            ISO 8601 format (YYYY-MM-DD).
+          type: string
+          format: date
+          example: 2028-05-22
+        active_end_at:
+          description: |
+            Date when the benefit package ceases to have effect.
+            ISO 8601 format (YYYY-MM-DD).
+          type: string
+          format: date
+          example: 2029-05-22
+        amount_of_policies:
+          description: Estimated amount of policies that should be affected by the benefit package.
+          type: number
+          format: integer
+          minimum: 1
+          example: 12500
+        affected_policy_range:
+          description: Range of policy numbers affected by the benefit package.
+          type: object
+          properties:
+            external_number_start_at:
+              description: Start of the policy number range.
+              type: string
+              maxLength: 10
+              example: "1234569890"
+            external_number_end_at:
+              description: End of the policy number range.
+              type: string
+              maxLength: 10
+              example: "1234569890"
+          required:
+            - external_number_end_at
+            - external_number_start_at
+        core_benefits:
+          type: array
+          maxItems: 100
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CoreBenefit"
+        optional_benefits:
+          type: array
+          maxItems: 100
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OptionalBenefit"
+        legal_consents:
+          description: List of consents that apply to the benefit package.
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/LegalConsentItem"
+      required:
+        - active_end_at
+        - active_start_at
+        - affected_policy_range
+        - amount_of_policies
+        - benefit_package_id
+        - core_benefits
+        - legal_consents
+        - product_reference
+        - status
+    CoreBenefit:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 80
+        name:
+          description: Name of the benefit.
+          type: string
+          example: International Emergency Medical Services
+          maxLength: 200
+      required:
+        - benefit_id
+        - name
+    OptionalBenefit:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 80
+        name:
+          description: Name of the benefit.
+          type: string
+          example: International Emergency Medical Services
+          maxLength: 200
+        description:
+          description: Description of the benefit.
+          type: string
+          example: The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence.
+          maxLength: 2000
+          readOnly: true
+      required:
+        - benefit_id
+        - description
+        - name
+    BenefitPackageList:
+      type: array
+      maxItems: 100
+      items:
+        $ref: "#/components/schemas/SimplifiedBenefitPackage"
+    SimplifiedBenefitPackage:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          description: |
+            Status of the benefit package. It can be:
+              - ACTIVE: The benefit package is active.
+              - AWAITING_AGENT_SIGNATURE: The benefit package has been created and is awaiting the signature of the agent.
+              - AWAITING_START: The benefit package has been submitted and is awaiting its active_start_at date.
+              - CANCELLED: The benefit package has been cancelled by the agent.
+              - DRAFT: The benefit package has been created but not yet submited.
+              - EXPIRED: The active_end_at date has finished, and the benefit package is no longer active.
+          type: string
+          enum:
+            - ACTIVE
+            - AWAITING_AGENT_SIGNATURE
+            - AWAITING_START
+            - CANCELLED
+            - DRAFT
+            - EXPIRED
+          readOnly: true
+        benefit_package_id:
+          description: Identifier of the benefit package.
+          type: string
+          maxLength: 18
+          example: b09aac28-7f63
+          readOnly: true
+        product_reference:
+          description: Short and readable concatenation of information related to the product.
+          type: string
+          maxLength: 10
+          example: I_C_BR
+        active_start_at:
+          description: |
+            Date when the benefit package effect takes place.
+
+            N.B. If the date is in the past, it will be set to today.
+
+            ISO 8601 format (YYYY-MM-DD).
+          type: string
+          format: date
+          example: 2028-05-22
+        active_end_at:
+          description: |
+            Date when the benefit package ceases to have effect.
+            ISO 8601 format (YYYY-MM-DD).
+          type: string
+          format: date
+          example: 2029-05-22
+        amount_of_policies:
+          description: Estimated amount of policies that should be affected by the benefit package.
+          type: number
+          format: integer
+          minimum: 1
+          example: 12500
+      required:
+        - active_end_at
+        - active_start_at
+        - amount_of_policies
+        - benefit_package_id
+        - product_reference
+        - status
+    BenefitPackagePostResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_package_id:
+          description: Identifier of the benefit package.
+          type: string
+          maxLength: 18
+          example: b09aac28-7f63
+      required:
+        - benefit_package_id
+    EncryptedPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        encrypted_data:
+          type: string
+          maxLength: 500000
+          description: Full body using message level encryption.
+      required:
+        - encrypted_data
+    LegalConsentItem:
+      type: object
+      properties:
+        code:
+          description: |
+            Code of the consent such as
+              - legal_consent_I_understand
+              - legal_consent_I_authorize
+              - ...
+          type: string
+          maxLength: 50
+          example: legal_consent_I_understand
+        is_confirmed:
+          description: Indicates if the consent has been confirmed or not.
+          type: boolean
+        consented_at:
+          description: |
+            Consent date.
+            UTC datetime, RFC3339 format (YYYY-MM-DDTHH:mm:ssZ).
+          type: string
+          format: date-time
+          example: 2019-03-22T10:59:00Z
+      required:
+        - code

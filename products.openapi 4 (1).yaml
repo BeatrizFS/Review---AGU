@@ -1,0 +1,222 @@
+%YAML 1.2
+---
+openapi: 3.0.0
+x-format-version: "2.0"
+info:
+  title: Products resource
+  description: Endpoint definition
+  version: 1.0.0
+paths:
+  /sales/enterprise/transversal/benefits_configuration/vexp/products:
+    get:
+      x-satisfactory-response-time:
+        acg: 250
+      summary: Retrieves information from a products resource.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental
+      parameters:
+        - $ref: "#/components/parameters/ProductReference"
+      responses:
+        "200":
+          description: Products information.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductsList"
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - dev_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only
+        - test_visabenefits_acg:
+            - urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only
+servers:
+  - url: https://apis.axa-assistance.com
+components:
+  parameters:
+    ProductReference:
+      name: product_reference
+      description: Short and readable concatenation of information related to the product.
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 10
+        example: I_C_BR
+  securitySchemes:
+    dev_visabenefits_acg:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://example-url-to-be-replaced.com/authorize
+          tokenUrl: https://example-url-to-be-replaced.com/oauth/token
+          scopes:
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only: Right to read products info
+    test_visabenefits_acg:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://example-url-to-be-replaced.com/authorize
+          tokenUrl: https://example-url-to-be-replaced.com/oauth/token
+          scopes:
+            urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only: Right to read products info
+  schemas:
+    ProductsList:
+      type: array
+      maxItems: 100
+      items:
+        $ref: "#/components/schemas/Product"
+    Product:
+      type: object
+      additionalProperties: false
+      properties:
+        product_reference:
+          description: Short and readable concatenation of information related to the product.
+          type: string
+          maxLength: 10
+          example: I_C_BR
+        name:
+          description: Name of the product.
+          type: string
+          example: Signature Business Card
+          maxLength: 80
+        core_benefits:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CoreBenefit"
+        optional_benefits:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/OptionalBenefit"
+      required:
+        - core_benefits
+        - name
+        - optional_benefits
+        - product_reference
+    CoreBenefit:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 80
+        name:
+          description: Name of the benefit.
+          type: string
+          example: International Emergency Medical Services
+          maxLength: 200
+      required:
+        - benefit_id
+        - name
+    OptionalBenefit:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 80
+        name:
+          description: Name of the benefit.
+          type: string
+          example: International Emergency Medical Services
+          maxLength: 200
+        description:
+          description: Description of the benefit.
+          type: string
+          example: The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence.
+          maxLength: 2000
+        cost:
+          description: Cost of the optional benefit
+          type: object
+          oneOf:
+            - $ref: '#/components/schemas/SimpleCost'
+            - $ref: '#/components/schemas/UsageCoverage'
+            - $ref: '#/components/schemas/PeriodCoverage'
+      required:
+        - benefit_id
+        - description
+        - name
+    UsageCoverage:
+      type: array
+      maxItems: 10
+      items:
+        properties:
+          coverage_type:
+            description: Type of coverage
+            type: string
+            enum:
+              - USAGE
+          incident_max:
+            description: Max value per incident.
+            type: integer
+            example: 500
+          annual_max:
+            description: Max value per calendar year.
+            type: integer
+            example: 1000
+        price:
+          description: Price of the optional benefit per card.
+          allOf:
+            - $ref: "#/components/schemas/Amount"
+        required:
+          - coverage_type
+          - incident_max
+          - annual_max
+          - price
+    PeriodCoverage:
+      type: array
+      maxItems: 10
+      items:
+        properties:
+          coverage_type:
+            description: Type of coverage
+            type: string
+            enum:
+              - PERIOD
+          period:
+            description: |
+              Coverage period
+              ISO 8601 format.
+            type: string
+            pattern: "^P[0-9]{1,2}M"
+            example: P6M
+            maxLength: 4
+        price:
+          description: Price of the optional benefit per card.
+          allOf:
+            - $ref: "#/components/schemas/Amount"
+        required:
+          - coverage_type
+          - period
+          - price
+    SimpleCost:
+      type: object
+      properties:
+        coverage_type:
+          description: Type of coverage
+          type: string
+          enum:
+              - SIMPLE
+        price:
+          description: Price of the optional benefit per card.
+          allOf:
+            - $ref: "#/components/schemas/Amount"
+      required:
+        - coverage_type
+        - price
+    Amount:
+      $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/schemas/Amount

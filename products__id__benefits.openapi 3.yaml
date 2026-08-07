@@ -1,0 +1,294 @@
+%YAML 1.2
+---
+openapi: 3.0.0
+x-format-version: "2.0"
+info:
+  title: Travel's product benefits.
+  description: Endpoint definition
+  version: 1.0.0
+paths:
+  "/backends/salesforce_visa_gateway/v2/products/{product_id}/benefits":
+    get:
+      x-satisfactory-response-time:
+        cc: 250
+      summary: Retrieves the benefit list.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/salesforceBackendEnvironments
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguage"
+        - $ref: "#/components/parameters/ProductId"
+        - $ref: "#/components/parameters/AsOfDate"
+      responses:
+        "200":
+          description: Benefit's list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BenefitItem"
+                maxItems: 100
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - test_auth0_cc:
+            - urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only
+        - prod_auth0_cc:
+            - urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only
+  "/backends/salesforce_visa_gateway/v2/products/{product_id}/benefits/{benefit_id}":
+    get:
+      x-satisfactory-response-time:
+        cc: 250
+      summary: Retrieves the benefit detail.
+      description: Cf. summary
+      x-business-category: TRAVEL
+      x-backends:
+        $ref: ./__backend_config.openapi.yaml#/x-backend-environments/salesforceBackendEnvironments
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguage"
+        - $ref: "#/components/parameters/BenefitId"
+        - $ref: "#/components/parameters/ProductId"
+        - $ref: "#/components/parameters/AsOfDate"
+      responses:
+        "200":
+          description: Benefit detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenefitDetail"
+        "400":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/400
+        "401":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/401
+        "403":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/403
+        "404":
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/404
+        default:
+          $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/responses/default
+      security:
+        - test_auth0_cc:
+            - urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only
+        - prod_auth0_cc:
+            - urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only
+servers:
+  - url: https://apis.axa-assistance.com
+components:
+  parameters:
+    AcceptLanguage:
+      name: accept-language
+      description: Accepted language, IANA language codification.
+      in: header
+      required: true
+      schema:
+        type: string
+        example: en-US
+        maxLength: 100
+    ProductId:
+      name: product_id
+      description: Identifier of the product.
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 150
+        example: G_C_CG
+    BenefitId:
+      name: benefit_id
+      description: Identifier of the benefit.
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 80
+        example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+    AsOfDate:
+      name: as_of_date
+      description: >
+        Retrieves benefit information as of the specified date.
+        If no parameter is sent, the API should retrieve the benefit information as now.
+        ISO 8601 format (YYYY-MM-DD).
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+        example: 2023-05-19
+  securitySchemes:
+    test_auth0_cc:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth-stg.api.axapartners.com/oauth/token
+          scopes:
+            urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only: Right to get benefits details.
+    prod_auth0_cc:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.api.axapartners.com/oauth/token
+          scopes:
+            urn:axa.partners.backends.salesforce_visa_gateway.benefits.read_only: Right to get benefits details.
+  schemas:
+    BenefitDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 80
+        benefit_code:
+          description: External identification for the benefit reference.
+          type: string
+          maxLength: 255
+          example: Trip_Cancellation
+        name:
+          description: Name of the benefit.
+          type: string
+          example: Trip cancellation.
+          maxLength: 80
+        coverages:
+          description: List of coverages related to the benefit.
+          type: array
+          maxItems: 2
+          items:
+            properties:
+              limit_amount:
+                description: Maximum amount for the coverage.
+                allOf:
+                  - $ref: "#/components/schemas/PositiveAmount"
+              is_international_trip:
+                description: Define if the coverage refers to an international trip (in opposition of domestic)
+                type: boolean
+                example: true
+        costs:
+          description: |
+            Costs of the optional benefit.
+            This field is only intended for benefits configuration purposes and should only be returned for specific consumer client_ids.
+            If you, as a consumer, need this information please contact your backend owner to properly configure your response payload.
+          type: object
+          oneOf:
+            - $ref: '#/components/schemas/SimpleCost'
+            - $ref: '#/components/schemas/UsageCost'
+            - $ref: '#/components/schemas/PeriodCost'
+      required:
+        - benefit_id
+        - name
+        - benefit_code
+    UsageCost:
+      type: array
+      maxItems: 10
+      items:
+        properties:
+          type:
+            description: Type of cost
+            type: string
+            enum:
+              - USAGE
+          maximum_amount_per_claim:
+            description: Maximum amount that will be reimbursed per claim.
+            allOf:
+              - $ref: "#/components/schemas/PositiveAmount"
+          maximum_amount_per_calendar_year:
+            description: Maximum amount that will be reimbursed per calendar year.
+            allOf:
+              - $ref: "#/components/schemas/PositiveAmount"
+          price:
+            description: Price of the optional benefit per card.
+            allOf:
+              - $ref: "#/components/schemas/PositiveAmount"
+        required:
+          - type
+          - maximum_amount_per_claim
+          - maximum_amount_per_calendar_year
+          - price
+    PeriodCost:
+      type: array
+      maxItems: 10
+      items:
+        properties:
+          type:
+            description: Type of cost
+            type: string
+            enum:
+              - PERIOD
+          period:
+            description: |
+              Coverage period
+              ISO 8601 format.
+            type: string
+            pattern: "^P[0-9]{1,2}M"
+            example: P6M
+            maxLength: 4
+          price:
+            description: Price of the optional benefit per card.
+            allOf:
+              - $ref: "#/components/schemas/PositiveAmount"
+        required:
+          - type
+          - period
+          - price
+    SimpleCost:
+      type: array
+      maxItems: 1
+      minItems: 1
+      items:
+        properties:
+          type:
+            description: Type of cost
+            type: string
+            enum:
+                - SIMPLE
+          price:
+            description: Price of the optional benefit per card.
+            allOf:
+              - $ref: "#/components/schemas/PositiveAmount"
+        required:
+          - type
+          - price
+    PositiveAmount:
+      $ref: https://move-portal.axa-assistance.com/static/libraries/life/v2/library.openapi.yaml#/components/schemas/PositiveAmount
+    BenefitItem:
+      type: object
+      properties:
+        benefit_id:
+          description: Identifier of the benefit.
+          type: string
+          example: 6fd155eb-c93e-4390-8671-8831f2b6ab57
+          maxLength: 150
+        benefit_code:
+          description: External identification for the benefit reference.
+          type: string
+          maxLength: 255
+          example: Trip_Cancellation
+        is_optional:
+          description: >
+            Indicates if the benefit is an option (not directly in the product
+            and can be added at will)
+
+            - true: the benefit is an option;
+
+            - false: the benefit is directly included in the product.
+          type: boolean
+          example: false
+        name:
+          description: Name of the benefit.
+          type: string
+          example: Trip cancellation.
+          maxLength: 80
+      required:
+        - benefit_id
+        - name
+        - benefit_code
