@@ -1,22 +1,44 @@
+    public static Map<String, Integer> validatePaginationQueryParams(Map<String, String> requestPaginationParams, Integer standardMaxResults) {
+        Map<String, Integer> paginationParams = new Map<String, Integer> {
+            'start_index' => 0,
+            'max_results' => standardMaxResults
+        };
 
-            Map<String, String> requestParams = RestContext.request.params;
-            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
-            
-            List<ServiceContract> benefitPackages = [
-                SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate, Amount_of_Policies__c
-                FROM ServiceContract
-                ORDER BY CreatedDate DESC
-            ];
-            
-            if(benefitPackages.isEmpty){
-                List<ServiceContract> paginatedBenefitPackages = WebportalApiUtility_v1.getPaginatedSObject(
-                    benefitPackages, 
-                    paginationParams.get('start_index'), 
-                    paginationParams.get('max_results'), 
-                    benefitPackages.size()
-                );
+        if(requestPaginationParams.containsKey('max_results')) {
+            if(String.isBlank(requestPaginationParams.get('max_results')) || !requestPaginationParams.get('max_results').isNumeric()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: max_results. Value must be non-empty, a valid number, and greater than or equal to 0.');
             }
 
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageListResponse(paginatedBenefitPackages), true)
-            );
+            if(Integer.valueOf(requestPaginationParams.get('max_results')) < standardMaxResults) {
+                paginationParams.put('max_results', Integer.valueOf(requestPaginationParams.get('max_results')));
+            }
+        }
+
+        if(requestPaginationParams.containsKey('start_index')) {
+            if(String.isBlank(requestPaginationParams.get('start_index')) || !requestPaginationParams.get('start_index').isNumeric()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: start_index. Value must be non-empty, a valid number, and greater than or equal to 0.');
+            }
+
+            paginationParams.put('start_index', Integer.valueOf(requestPaginationParams.get('start_index')));
+        }
+
+        return paginationParams;
+    }
+
+    public static List<SObject> getPaginatedSObject(List<SObject> objectList, Integer startIndex, Integer maxResults, Integer size) {
+        List<SObject> paginatedSObject = new List<SObject>();
+
+        if(size < startIndex) {
+            return paginatedSObject;
+        } else if(size > maxResults && size > (startIndex + maxResults)) {
+            for(Integer i = startIndex; i < (startIndex + maxResults); i++) {
+                paginatedSObject.add(objectList[i]);
+            }
+        } else {
+            for(Integer i = startIndex; i < size; i++) {
+                paginatedSObject.add(objectList[i]);
+            }
+        }
+
+        return paginatedSObject;
+    }
