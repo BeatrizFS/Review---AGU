@@ -1,14 +1,747 @@
-Quando passo isso:
-{
-  "communication_subscriptions": {
-  }
+@isTest
+private class Test_WebportalSalesBanksAgents_VEXP {
+
+    private static String token =  'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InhobHdPb3h2M1YwbmpiSTU1eDlEVCJ9.eyJtaSI6ZmFsc2UsImlzcyI6Imh0dHBzOi8vYXV0aC1zdGcuYXBpLmF4YXBhcnRuZXJzLmNvbS8iLCJzdWIiOiJhRWhZNGN5UzdpS00wbHVITU1XRlRYbk5ybjFBMVA2Q0BjbGllbnRzIiwiYXVkIjoiaHR0cHM6Ly9hcGktdGVzdC5heGEtYXNzaXN0YW5jZS5jb20vIiwiaWF0IjoxNzg1NDQ5MzcwLCJleHAiOjE3ODU0NTI5NzAsInNjb3BlIjoidXJuOmF4YS5wYXJ0bmVycy5zYWxlcy50cmF2ZWwucHJvZHVjdHMuYmVuZWZpdHMucmVhZF9vbmx5IHVybjpheGEucGFydG5lcnMuc2FsZXMudHJhdmVsLnByb2R1Y3RzLnJlYWRfb25seSB1cm46YXhhLnBhcnRuZXJzLnNwZWNpZmljLnZpc2FnYXRld2F5LmFjY291bnRfcmVjb3ZlcnlfcmVxdWVzdHMud3JpdGUgdXJuOmF4YS5wYXJ0bmVycy5zcGVjaWZpYy52aXNhZ2F0ZXdheS5leHBlY3RlZF9kb2N1bWVudHMucmVhZF9vbmx5IHVybjpheGEucGFydG5lcnMuc3BlY2lmaWMudmlzYWdhdGV3YXkuZnJlcXVlbnRseV9hc2tlZF9xdWVzdGlvbnMucmVhZF9vbmx5IHVybjpheGEucGFydG5lcnMuc3BlY2lmaWMudmlzYWdhdGV3YXkuZnJlcXVlbnRseV9hc2tlZF9xdWVzdGlvbnMud3JpdGUgdXJuOmF4YS5wYXJ0bmVycy5zcGVjaWZpYy52aXNhZ2F0ZXdheS5wcm9kdWN0cy5iZW5lZml0cy5yZWFkX29ubHkgdXJuOmF4YS5wYXJ0bmVycy5zcGVjaWZpYy52aXNhZ2F0ZXdheS5wcm9kdWN0cy5yZWFkX29ubHkgdXJuOmF4YS5wYXJ0bmVycy5zYWxlcy5lbnRlcnByaXNlLnRyYW5zdmVyc2FsLmJlbmVmaXRzX2NvbmZpZ3VyYXRpb24uYmFua3MuYWdlbnRzLnJlYWRfb25seSB1cm46YXhhLnBhcnRuZXJzLnNhbGVzLmVudGVycHJpc2UudHJhbnN2ZXJzYWwuYmVuZWZpdHNfY29uZmlndXJhdGlvbi5iYW5rcy5hZ2VudHMud3JpdGUiLCJndHkiOiJjbGllbnQtY3JlZGVudGlhbHMiLCJhenAiOiJhRWhZNGN5UzdpS00wbHVITU1XRlRYbk5ybjFBMVA2QyJ9.f06euFINSbHtrlz9lJ-pTPFFlgKb3oO5yKdiR3GV-QVCB7Xv5JxAUW5rvs3iuhHwSbEWixn7dYhk0sajkyEwb6gXbCR3aKz8h00C1eRMYYEkEvH1mahVM-4hfw-M4PDMM5ijv_1Fem7EVtQVttFtCB8JILKSNVZhhxc1u3Vr4swS3EG3jP9L4PgLwp_TOfkkmctYmqHF_DdKn9gMR5immpNS76R9GMV2suBu-fvUCmpbft_VKyklLlpwcRifI_XCg2R0y-gR2iMmeVN21n3VPeh2vLiHbwH2N_IXxb_uZMcVdXzl1O8gred5V_E-K7_Hpk6Du_YZwCmaMz19ZQzP4Q';
+
+	@testSetup
+	static void setup() {
+
+        Id bankRecordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName().get('Bank').getRecordTypeId();
+
+        Account bank = new Account(
+            Name = 'Bank Test',
+            RecordTypeId = bankRecordTypeId,
+            Country__c = 'US',
+            CurrencyIsoCode = 'USD'
+        );
+        insert bank;
+
+        Contact agent = new Contact(
+            FirstName = 'Paulo',
+            LastName = 'Silva',
+            Email = 'paulo.silva@test.com',
+            AccountId = bank.Id
+        );
+        insert agent;
+    }
+
+    @isTest
+    static void testSuccessPOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"Maria",' +
+            '"last_name":"Silva",' +
+            '"email":"maria@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        Contact contact = [SELECT FirstName, LastName, Email, AccountId FROM Contact WHERE Email = 'maria@test.com' LIMIT 1];
+
+        System.assertEquals(bank.Id, contact.AccountId);
+        System.assertEquals('Maria', contact.FirstName);
+        System.assertEquals('Silva', contact.LastName);
+    }
+
+    @isTest
+    static void testFailBankNotFoundPOST() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/001000000000000AAA/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"Maria",' +
+            '"last_name":"Silva",' +
+            '"email":"maria@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+   
+    @isTest
+    static void testFailMissingFirstNamePOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"",' +
+            '"last_name":"Silva",' +
+            '"email":"test@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testFailRequiredFirstNamePOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"last_name":"Silva",' +
+            '"email":"test@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testFailMissingLastNamePOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"Maria",' +
+            '"last_name":"",' +
+            '"email":"test@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+        @isTest
+    static void testFailMissingEmailPOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"Maria",' +
+            '"last_name":"Silva",' +
+            '"email":""' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testFailTooLongPOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        String firstName = '';
+        for(Integer i = 0; i < 41; i++) {
+            firstName += 'A';
+        }
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"' + firstName + '",' +
+            '"last_name":"Silva",' +
+            '"email":"teste@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage error = (WebportalApiUtility_v1.ErrorMessage)
+            JSON.deserialize(RestContext.response.responseBody.toString(), 
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assert(error.error_description.contains('first_name'));
+    }   
+
+    @isTest
+    static void testFailInvalidJsonPOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName='Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+        RestContext.request.requestBody = Blob.valueOf('{ "first_name":"Maria"');
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testUnauthorizedPOST() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName='Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+            '"first_name":"Maria",' +
+            '"last_name":"Silva",' +
+            '"email":"maria@test.com"' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(401, RestContext.response.statusCode);
+    }
+
+
+    @isTest
+    static void testSuccessGET() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+        Contact agent = [SELECT Id FROM Contact WHERE AccountId = :bank.Id LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents/' + agent.Id;
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        
+        WebportalSalesBanksAgents_VEXP.doGet();
+
+        String responseBody = RestContext.response.responseBody.toString();
+
+        WebportalSalesBanksAgents_VEXP.AgentData response =
+            (WebportalSalesBanksAgents_VEXP.AgentData)
+                JSON.deserialize(
+                    responseBody,
+                    WebportalSalesBanksAgents_VEXP.AgentData.class
+                );
+
+        Test.stopTest();
+
+        System.assertEquals(200, RestContext.response.statusCode);
+        System.assertEquals('Paulo', response.first_name);
+        System.assertEquals('Silva', response.last_name);
+        System.assertEquals('paulo.silva@test.com', response.email);
+        //System.assertEquals(true , response.communication_subscriptions.email);
+    }
+
+    @isTest
+    static void testFailWithEmptyIdsGET() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks//agents/';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+
+        WebportalSalesBanksAgents_VEXP.doGet();
+
+        String responseBody = RestContext.response.responseBody.toString();
+
+        WebportalApiUtility_v1.ErrorMessage response = (WebportalApiUtility_v1.ErrorMessage)
+            JSON.deserialize(responseBody, 
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testFailAgentNotFoundGET() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id + '/agents/003000000000000AAA';
+
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+
+        WebportalSalesBanksAgents_VEXP.doGet();
+
+        String responseBody = RestContext.response.responseBody.toString();
+
+        WebportalApiUtility_v1.ErrorMessage response = (WebportalApiUtility_v1.ErrorMessage)
+            JSON.deserialize(responseBody, 
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        Test.stopTest();
+
+        System.assertEquals(404, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testUnauthorizedGET() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/001000000000001AAA/agents/003000000000001AAA';
+        RestContext.request.httpMethod = 'GET';
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanksAgents_VEXP.doGet();
+        Test.stopTest();
+
+        System.assertEquals(401, RestContext.response.statusCode);    
+    }
+
 }
 
-o retorno é 200 e
-{
-    "communication_subscriptions": {}
+agora vamos segui a classe de teste preciso adicionar os cenários do PATCH,
+cenario separado do communication subscription para o POST
+e também um cenário separado para o GET
+
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/banks/*/agents/*')
+global with sharing class WebportalSalesBanksAgents_VEXP {
+
+    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String> {
+        'first_name',
+        'last_name',
+        'email'
+    };
+    
+    private static final String CHANNEL_EMAIL = 'EMAIL';
+    private static final String CHANNEL_PUSH_NOTIFICATION = 'PUSH_NOTIFICATION';
+    private static final String RELATED_TO_BENEFIT_PACKAGE = 'BENEFIT_PACKAGES';
+
+    @HttpPost
+    global static void doPost() {
+        handlePost();
+    }
+
+    @HttpGet
+    global static void doGet() {
+        handleGet();
+    }
+
+    @HttpPatch
+    global static void doPatch() {
+        handlePatch();
+    }
+
+    private static void handlePost() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only',
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
+                }
+            );
+
+            String requestUri = RestContext.request.requestURI;
+            String bankId = requestUri.substringBetween('/banks/', '/agents');
+
+            if (String.isBlank(bankId)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
+            }
+
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
+            AgentData agentRequest = (AgentData)JSON.deserializeStrict(requestBody, AgentData.class);
+
+            WebportalApiUtility_v1.validateRequestRequiredFields(requestBody, POST_REQUIRED_FIELDS);
+
+            List<Account> bankRecords = [SELECT Id FROM Account WHERE Id = :bankId AND RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (bankRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
+            }
+
+            Account bank = bankRecords[0];
+
+            Contact newAgent = new Contact(
+                AccountId = bank.Id,
+                FirstName = agentRequest.first_name,
+                LastName = agentRequest.last_name,
+                Email = agentRequest.email
+            );
+            insert newAgent;
+
+            if(agentRequest.communication_subscriptions != null && agentRequest.communication_subscriptions.email != null && agentRequest.communication_subscriptions.email) {
+                createCommunicationSubscription(bank.Id, newAgent.Id, CHANNEL_EMAIL, null);
+            }
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(newAgent), true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+        } catch (JSONException ex) {
+            RestContext.response.statusCode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating agent.')));
+        }
+    }
+
+    private static void handleGet() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
+                WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                    RestContext.request,
+                    new Set<String>{
+                        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only'
+                    }
+                );
+
+            String requestUri = RestContext.request.requestURI;
+            String bankId = requestUri.substringBetween('/banks/', '/agents/');
+            String agentId = requestUri.substringAfter('/agents/');
+
+            if (String.isBlank(bankId) || String.isBlank(agentId)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
+            }
+
+            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (agentRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
+            }
+
+            Contact agentRecord = agentRecords[0];
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agentRecord), true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
+        }
+    }
+
+    private static void handlePatch() {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.write'
+                }
+            );
+
+            String requestUri = RestContext.request.requestURI;
+            String bankId = requestUri.substringBetween('/banks/', '/agents/');
+            String agentId = requestUri.substringAfter('/agents/');
+
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+
+            if (String.isBlank(bankId) || String.isBlank(agentId)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'The input information received were not compliant with the endpoint specification.');
+            }
+
+            AgentData agentRequest = (AgentData) JSON.deserializeStrict(requestBody, AgentData.class);
+
+            List<Contact> agentRecords = [SELECT Id, AccountId, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+            if (agentRecords.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not Found', 'The searched resource was not found.');
+            }
+
+            Contact agent = agentRecords[0];
+
+            if (agentRequest.communication_subscriptions != null &&
+                agentRequest.communication_subscriptions.benefit_packages != null) {
+
+                updateBenefitPackageSubscription(bankId, agent.Id, agentRequest.communication_subscriptions.benefit_packages);
+            }
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageSubscriptionResponse(agentRequest.communication_subscriptions.benefit_packages), true));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+
+            if (ex.status_code == 401) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401', 'Unauthorized', 'Header "authorization" is not a valid JSON Web Token.')));
+            } else if (ex.status_code == 403) {
+                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
+            } else {
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage(
+                            String.valueOf(ex.status_code),
+                            ex.error,
+                            ex.error_description
+                        )
+                    )
+                );
+            }
+
+        } catch (Exception ex) {
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error updating agent information.')));
+        }
+    }
+
+    private static Communication_Subscription__c getCommunicationSubscription(Id contactId, String channel, String relatedTo) {
+        List<Communication_Subscription__c> subscriptions;
+        if (channel == CHANNEL_EMAIL) {
+            subscriptions = [SELECT Id, Channel__c, Related_To__c 
+                FROM Communication_Subscription__c 
+                WHERE Contact__c = :contactId 
+                AND Channel__c = :channel LIMIT 1];
+        } else {
+            subscriptions = [SELECT Id, Channel__c, Related_To__c 
+                FROM Communication_Subscription__c 
+                WHERE Contact__c = :contactId 
+                AND Channel__c = :channel 
+                AND Related_To__c = :relatedTo LIMIT 1];
+        }
+        return subscriptions.isEmpty() ? null : subscriptions[0];
+    }
+
+    private static AgentData buildAgentResponse(Contact agent) {
+        AgentData response = new AgentData();
+        response.first_name = agent.FirstName;
+        response.last_name = agent.LastName;
+        response.email = agent.Email;
+
+        Communication_Subscription__c emailSubscription = getCommunicationSubscription(agent.Id, CHANNEL_EMAIL, null);
+
+        if (emailSubscription != null) {
+            response.communication_subscriptions = new CommunicationSubscriptions();
+            response.communication_subscriptions.email = true;
+        }
+
+        return response;
+    }
+
+    private static BenefitPackageSubscriptionResponse buildBenefitPackageSubscriptionResponse(Boolean benefitPackages) {
+        BenefitPackageSubscriptionResponse response = new BenefitPackageSubscriptionResponse();
+        response.communication_subscriptions = new CommunicationSubscriptions();
+        response.communication_subscriptions.benefit_packages = benefitPackages;
+        return response;
+    }
+
+    private static void updateBenefitPackageSubscription(Id accountId, Id contactId, Boolean isSubscribed) {
+        Communication_Subscription__c subscription =
+            getCommunicationSubscription(contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+
+        if (isSubscribed && subscription == null) {
+            createCommunicationSubscription(accountId, contactId, CHANNEL_PUSH_NOTIFICATION, RELATED_TO_BENEFIT_PACKAGE);
+            return;
+        }
+
+        if (!isSubscribed && subscription != null) {
+            delete subscription;
+        }
+    }
+
+    private static void createCommunicationSubscription(Id accountId, Id contactId, String channel, String relatedTo) {
+        Communication_Subscription__c communicationSubscription = 
+            new Communication_Subscription__c(
+                Customer__c = accountId,
+                Contact__c = contactId,
+                Channel__c = channel
+        );
+
+        if(String.isNotBlank(relatedTo)) {
+            communicationSubscription.Related_To__c = relatedTo;
+        }
+
+        insert communicationSubscription;
+    }
+
+    public class AgentData {
+        public String first_name {
+            get {
+                return first_name;
+            }
+            set {
+                if(String.isBlank(value) || value.length() > 40) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (40) or blank: first_name'
+                    );
+                }
+
+                first_name = value;
+            }
+        }
+        public String last_name {
+            get {
+                return last_name;
+            }
+            set {
+                if(String.isBlank(value) || value.length() > 80) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        'Bad Request',
+                        'Invalid request body. Out of bounds (80) or blank: last_name'
+                    );
+                }
+
+                last_name = value;
+            }
+        }
+        public String email {
+            get {
+                return email;
+            }
+            set {
+                if (!WebportalApiUtility_v1.isValidEmail(value)) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400, 'Bad Request', 'Invalid request body. Invalid format: email'
+                    );
+                }
+
+                email = value;
+            }
+        }
+        public CommunicationSubscriptions communication_subscriptions;
+    }
+
+    public class BenefitPackageSubscriptionResponse {
+        public CommunicationSubscriptions communication_subscriptions;
+    }
+    
+    public class CommunicationSubscriptions{
+        public Boolean email;
+        public Boolean benefit_packages;
+    }
 }
-
-não cria registro no salesforce
-
-está correto?
