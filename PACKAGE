@@ -140,3 +140,8 @@ private static List<OptionalBenefit> buildOptionalBenefits(...)
 
 private static List<LegalConsentItem> buildLegalConsents(...)
 
+-----------
+
+SELECT BIN_Range__r.Benefit_Coverage__c, BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c 
+                                                               FROM MN_BINRange_Benefit__c 
+                                                               WHERE Benefit__c = :benefitId AND BIN_Range__r.IIN_Number__c = :bin.BIN_6FirstDigits__c
