@@ -1,348 +1,185 @@
-/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages
-Retrieves list of products package resource.
+No WebportalApiUtility
 
-Jump to definition
-Cf. summary
+    public static Map<String, Integer> validatePaginationQueryParams(Map<String, String> requestPaginationParams, Integer standardMaxResults) {
+        Map<String, Integer> paginationParams = new Map<String, Integer> {
+            'start_index' => 0,
+            'max_results' => standardMaxResults
+        };
 
-Parameters
-Try it out
-Name	Description
-start_index
-integer
-(query)
-A number that specifies the starting point when paging through a list of resources.
+        if(requestPaginationParams.containsKey('max_results')) {
+            if(String.isBlank(requestPaginationParams.get('max_results')) || !requestPaginationParams.get('max_results').isNumeric()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: max_results. Value must be non-empty, a valid number, and greater than or equal to 0.');
+            }
 
-Default value : 0
+            if(Integer.valueOf(requestPaginationParams.get('max_results')) < standardMaxResults) {
+                paginationParams.put('max_results', Integer.valueOf(requestPaginationParams.get('max_results')));
+            }
+        }
 
-0
-max_results
-integer
-(query)
-The maximum number of results when paging through a list of resources.
+        if(requestPaginationParams.containsKey('start_index')) {
+            if(String.isBlank(requestPaginationParams.get('start_index')) || !requestPaginationParams.get('start_index').isNumeric()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'Invalid parameter: start_index. Value must be non-empty, a valid number, and greater than or equal to 0.');
+            }
 
-Default value : 100
+            paginationParams.put('start_index', Integer.valueOf(requestPaginationParams.get('start_index')));
+        }
 
-100
-Responses
-Code	Description	Links
-200	
-Products information.
-
-Media type
-
-application/json
-Controls Accept header.
-Example Value
-Schema
-[
-  {
-    "status": "ACTIVE",
-    "benefit_package_id": "b09aac28-7f63",
-    "product_reference": "I_C_BR",
-    "active_start_at": "2028-05-22",
-    "active_end_at": "2029-05-22",
-    "amount_of_policies": 12500
-  }
-]
-No links
-400	
-Bad Request.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "400",
-  "error": "Bad Request",
-  "error_description": "The input information received were not compliant with the endpoint specification."
-}
-No links
-401	
-Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "401",
-  "error": "Unauthorized",
-  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
-}
-No links
-403	
-Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "403",
-  "error": "Forbidden",
-  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
-}
-No links
-default	
-Default response format.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "500",
-  "error": "Internal Server Error"
-}
-No links
-Extensions
-Field	Value
-x-satisfactory-response-time	{"acg":250}
-x-business-category	"TRAVEL"
-
-Seguindo essa base de código, vamos continuar o desenvolvimento, para esse GET do Benefit Packages
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
-global with sharing class VOBPSalesBenefitPackages_V1 {
-
-    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
-        'product_reference',
-        'active_start_at',
-        'active_end_at',
-        'amount_of_policies',
-        'core_benefits',
-        'optional_benefits',
-        'legal_consents'
-    };
-
-    @HttpPost
-    global static void doPost() {
-        handlePost();
+        return paginationParams;
     }
 
-    @HttpGet
-    global static void doGet() {
-		if(String.isBlank(RestContext.request.requestURI.substringAfter('/benefit_packages/'))) {
-        	handleGet();
-		} else {
-			VOBPSalesBenefitPackagesDetails_V1.doGet();
+Exemplo de uso
+@RestResource(urlMapping='/specific/visagateway/v1/claims')
+global with sharing class WebportalClaimsAPIClaimsStatus_V1 extends WebportalAPIBase_v1 {
+	@HttpGet
+    global static void getClaims(){
+    	new WebportalClaimsAPIClaimsStatus_V1().doGet();
+    }
+
+    public override void doGet(){
+		RestContext.response.addHeader('Content-Type', 'application/json');
+        Boolean hasBeenAuthenticated = false;
+        Boolean areValidParams = false;
+        string customerId = RestContext.request.params.get('customer_id');
+        Map<String, String> queryParameters = RestContext.request.params;
+        Map<String, Integer> validatedPaginatedParams;
+
+        try {
+			WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData = WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(RestContext.Request, new Set<string>{'urn:axa.partners.sales.individual.certificates.write'});
+			WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig = WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
+
+            if (!Test.isRunningTest()) {
+               WebportalAPITokenAuthentication_v1.validateClientAccess(clientAccessConfig, customerId, accessTokenData);
+            }
+
+            validatedPaginatedParams = WebportalApiUtility_v1.validatePaginationQueryParams(queryParameters, 100);
+
+            hasBeenAuthenticated = true;
+            areValidParams = true;
+        } catch( WebportalApiUtility_v1.RequestAPIException ex ) {
+            RestContext.response.statuscode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error, ex.error_description)));
+        }
+
+		if( hasBeenAuthenticated && areValidParams ) {
+			string binNumber = extractBinFromRequest(RestContext.request.params.get('policy_id'));
+			if( String.isBlank( customerId ) ) {
+				RestContext.response.statuscode = 400;
+				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Id is required')));
+			} else if( !WebportalApiUtility_v1.isValidCustomerID(customerId) ) {
+				RestContext.response.statuscode = 400;
+				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Id is invalid')));
+            } else if( String.isNotBlank( binNumber ) && !WebportalApiUtility_v1.isValidBINNumber(binNumber) ) {
+				RestContext.response.statuscode = 400;
+				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'BIN Number is invalid')));
+            } else {
+				Account existingCustomer = WebportalApiUtility_v1.getUserByCustomerId(customerId);
+				if( existingCustomer == null ) {
+					RestContext.response.statuscode = 400;
+					RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Not Found')));
+				} else {
+					List<Case> claims;
+                    Boolean validBINNumber = true;
+                    String language = RestContext.request.headers.get('Accept-Language');
+
+					if( String.isNotBlank( binNumber ) && binNumber.length() == 10 ) {
+                        try {
+                            VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN(binNumber);
+                            claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND Bin__c = :bin.Id AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
+                        } catch( WebportalApiUtility_v1.RequestAPIException ex ) {
+                            validBINNumber = false;
+                        }
+					} else if( String.isNotBlank( binNumber ) && binNumber.length() == 16 ) {
+                        List<MN_Account_BIN__c> accountBINs = [SELECT Id, BIN__c, Customer__c FROM MN_Account_BIN__c WHERE Credit_Card_Token__c = :binNumber AND Customer__r.Customer_Identifier__c = :customerId];
+                        if( accountBINs.size() == 0 ) {
+                            validBINNumber = false;
+                        } else {
+                            MN_Account_BIN__c accountBIN = accountBINs[0];
+                            claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND Bin__c = :accountBIN.BIN__c AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
+                        }
+                    } else if( String.isBlank( binNumber ) ) {
+						claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
+					}
+
+                    if( !validBINNumber ) {
+                        RestContext.response.statuscode = 404;
+                        RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'not_found', 'BIN Number Not Found')));
+                    } else {
+                        List<ClaimsResponse> responses = new List<ClaimsResponse>();
+                        List<Case> paginatedClaims = WebportalApiUtility_v1.getPaginatedSObject(claims, validatedPaginatedParams.get('start_index'), validatedPaginatedParams.get('max_results'), claims.size());
+                        Map<String, Status> claimStatusesMap = getClaimStatus(paginatedClaims);
+
+                        for(Case claim : paginatedClaims) {
+                            ClaimsResponse response = new ClaimsResponse();
+                            response.claim_id = claim.Id;
+                            response.claim_number = claim.CaseNumber;
+                            response.claim_type_id = claim.Case_Benefit__c;
+                            response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_EN__c;
+
+                            if(language != null) {
+                                if( language.containsIgnoreCase('pt') ) {
+                                    response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_pt_BR__c;
+                                } else if( language.containsIgnoreCase('es')) {
+                                    response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_ES__c;
+                                }
+                            }
+
+                            response.benefit_external_reference = claim.Case_Benefit__r.External_Reference__c;
+                            response.created_at = String.valueOf( claim.CreatedDate );
+                            response.status = claim.Status;
+
+                            if(claimStatusesMap.containsKey(claim.Id)) {
+                                response.statuses = claimStatusesMap.get( claim.Id );
+                            }
+
+                            responses.add(response);
+                        }
+
+                        RestContext.response.statuscode = 206;
+                        RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(validatedPaginatedParams.get('start_index'), paginatedClaims.size(), claims.size()));
+                        RestContext.response.responseBody = Blob.valueOf( JSON.serializePretty( responses ) );
+                    }
+				}
+			}
 		}
     }
+    private static final Set<String> validGetParams = new Set<String> {
+        'was_archived',
+        'was_read',
+        'related_to',
+        'start_index',
+        'max_results'
+    };
 
-    private static void handlePost() {
-        try{
-            RestContext.response.addHeader('Content-Type', 'application/json');
+    private static void validateGetParams( Map<String,Object> params ) {
+        String relatedTo = params.containsKey('related_to') ? (String) params.get('related_to') : null;
 
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext.request,
-                new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
-                    'urn:axa.partners.benefits_platform.write'
-                }
-            );
+        if( String.isNotBlank( relatedTo ) && !WebportalApiUtility_v1.isValidPicklistValue(Communication_Subscription__c.Related_To__c.getDescribe(), relatedTo) ) {
+            throw new WebportalApiUtility_v1.RequestAPIException( 400, 'bad_request', 'Invalid param. Value provided to related_to is invalid' );
+        }
 
-            String requestBody = RestContext.request.requestBody.toString().trim();
-            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
-            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
-
-            BenefitPackage benefitPackageRequest = (BenefitPackage)JSON.deserializeStrict(requestBody, BenefitPackage.class);
-
-            ServiceContract contract = buildServiceContract(benefitPackageRequest);
-
-            insert contract;
-
-            //ContractLineItem
-            
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-            if (ex.status_code == 401) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('401','Unauthorized','Header "authorization" is not a valid JSON Web Token.')));
-            } else if (ex.status_code == 403) {
-                RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('403','Forbidden','The right to access this endpoint has not been granted in the JSON Web Token.')));
-            } else {
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage(
-                            String.valueOf(ex.status_code),
-                            ex.error,
-                            ex.error_description
-                        )
-                    )
-                );
+        for( Object param : params.keySet() ) {
+            if( !validGetParams.contains( String.valueOf(param) ) ) {
+                throw new WebportalApiUtility_v1.RequestAPIException( 400, 'bad_request', 'Invalid param. Param ' + param + ' does not exist' );
             }
-        } catch (JSONException ex) {
-            RestContext.response.statusCode = 400;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
-        } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error creating benefit package.')));
         }
-
     }
 
-    private static Product__c getProductByReference(String productReference){
-        List<Product__c> products = [SELECT Id FROM Product__c WHERE Key__c = :productReference LIMIT 1];
-        if(products.isEmpty()){
-            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Product with reference ' + productReference + ' not found.');
-        }
-        return products[0];
-    }
-
-    private static ServiceContract buildServiceContract(BenefitPackage request){
-        ServiceContract contract = new ServiceContract();
-        contract.Name = '-';
-        contract.Product_Reference__c = request.product_reference;
-        //contract.Product__c = getProductByReference(request.product_reference).Id;
-        contract.StartDate = request.active_start_at;
-        contract.EndDate = request.active_end_at;
-        //contract.Term - Whole months between `StartDate` and `EndDate`;
-        contract.Amount_of_Policies__c = request.amount_of_policies;
-
-        if(request.affected_policy_range != null){
-            contract.Policy_Range_Start__c = request.affected_policy_range.external_number_start_at;
-            contract.Policy_Range_End__c = request.affected_policy_range.external_number_end_at;
-        }
-
-        populateLegalConsents(contract, request);
-
-        return contract;
-    }
-
-
-    private static void populateLegalConsents(ServiceContract contract, BenefitPackage request) {
-        if (request.legal_consents != null && !request.legal_consents.isEmpty()) {
+        if (allContracts.isEmpty()) {
+            String encryptedResponse = WebportalApiUtility_v1.encryptRequestBody(accessTokenData.aud, JSON.serializePretty(response, true));
+            ModelUtility.EncryptedData encryptObj =  new ModelUtility.EncryptedData();
+            encryptObj.encrypted_data = encryptedResponse;
             
-            LegalConsentItem consent = request.legal_consents[0];
-
-            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-                contract,
-                'Legal_Consent_Code__c',
-                consent.code,
-                false
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(encryptObj, true));
+        } else {
+            Map<String, String> requestParams = RestContext.request.params;
+            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
+        
+            Integer totalSize = allContracts.size();
+            List<Trip_Assistance__c> paginatedContracts = WebportalApiUtility_v1.getPaginatedSObject(
+                allContracts, 
+                paginationParams.get('start_index'), 
+                paginationParams.get('max_results'), 
+                totalSize
             );
 
-            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-                contract,
-                'Legal_Consent_Confirmed__c',
-                consent.is_confirmed != null ? consent.is_confirmed :
-                false
-            );
-
-            String consentedAt = consent.consented_at;
-
-            if (consentedAt != null && consentedAt.contains('T') && consentedAt.contains('Z')) {
-                consentedAt = consentedAt.replace('T', ' ');
-                consentedAt = consentedAt.replace('Z', '');
-            }
-
-            contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
-                contract,
-                'Legal_Consent_Date__c',
-                consentedAt != null ? Datetime.valueOfGmt(consentedAt) : null,
-                false
-            );        
-        }
-    }
-
-    public class BenefitPackage {
-        public String benefit_package_id; 
-        public String product_reference; 
-        public Date active_start_at; 
-        public Date active_end_at; 
-        public Integer amount_of_policies;
-        public AffectedPolicyRange affected_policy_range;
-        public List<CoreBenefit> core_benefits;
-        public List<OptionalBenefit> optional_benefits;
-        public List<LegalConsentItem> legal_consents;
-    }
-
-    public class AffectedPolicyRange {
-        public String external_number_start_at;
-        public String external_number_end_at;
-    }
-
-    public class CoreBenefit {
-        public String benefit_id; 
-        public String name;
-    }
-
-    public class OptionalBenefit {
-        public String benefit_id;
-        public String name; 
-        public String description;
-    }
-
-    public class LegalConsentItem {
-        public String code;
-        public Boolean is_confirmed;
-        public String consented_at;
-    }
-
-    public class BenefitPackagePostResponse {
-        public String benefit_package_id;
-    }
-}
-
-Object - Service Contract
-1. Layout - Benefit Package Layout
-2. RecordType - Benefit Package ✅
-3. Custom Fields
-
-✅Label: Package Status
-API Name: Package_Status__c
-Type: Picklist
-Values:
-Draft
-Awaiting Start
-Active
-Cancelled
-Expired
-
-✅Label: Product Reference
-Yaml: product_reference
-API Name: Product_Reference__c
-Type: Text(10)
-Obs.:
-Marcar como External Id.
-
-✅Label: Product
-API Name: Product__c
-Type: Lookup(Product__c)
-Obs.: Preenchido automaticamente via Apex, pela informação do Product_Reference__c
-
-✅Label: Amount of Policies
-API Name: Amount_of_Policies__c
-Type: Number(9,0)
-
-✅Label: Legal Consent Code
-API Name: Legal_Consent_Code__c
-Type: Text (255)
-Description: Stores the consent code received in legal_consents.code.
-
-✅Label: Legal Consent Confirmed
-API Name: Legal_Consent_Confirmed__c
-Type: Checkbox
-Default Value: False
-Description: Stores the value received in legal_consents.is_confirmed.
-
-✅Label: Legal Consent Date
-API Name: Legal_Consent_Date__c
-Type: Date/Time
-Description: Stores the timestamp received in legal_consents.consented_at.
-
-- Fluxo comercial
-
-✅Label: Policy Range Start`
-API Name: Policy_Range_Start__c`
-Type: Text(10)
-
-✅Label: Policy Range End
-API Name: Policy_Range_End__c
-Type: Text(10)
-x-backends	{"$ref":"./__backend_config.openapi.yaml#/x-backend-environments/benefitsConfigurationBackendsExperimental"}
