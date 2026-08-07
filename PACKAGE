@@ -1,89 +1,93 @@
-    private static void handleGet() {
-        try {
-            RestContext.response.addHeader('Content-Type', 'application/json');
+@isTest
+static void testSuccessGETListEmpty() {
 
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext.request,
-                new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
-                    'urn:axa.partners.benefits_platform.read_only'
-                }
-            );
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+    RestContext.request.httpMethod = 'GET';
+    RestContext.request.headers.put('authorization2', 'Bearer ' + token);
 
-            Map<String, String> requestParams = RestContext.request.params;
-            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
+    RestContext.response = new RestResponse();
 
-            List<ServiceContract> benefitPackages = [
-                SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate, Amount_of_Policies__c 
-                FROM ServiceContract
-                ORDER BY CreatedDate DESC LIMIT 50000
-            ];
+    Test.startTest();
+    VOBPSalesBenefitPackages_V1.doGet();
+    Test.stopTest();
 
-            List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
+    System.assertEquals(200, RestContext.response.statusCode);
 
-            if (!benefitPackages.isEmpty()) {
-                paginatedBenefitPackages = WebportalApiUtility_v1.getPaginatedSObject(
-                    benefitPackages, paginationParams.get('start_index'), 
-                    paginationParams.get('max_results'), 
-                    benefitPackages.size()
-                );
-            }
+    List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage> response =
+        (List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage>)
+        JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage>.class
+        );
 
-            RestContext.response.statusCode = 200;
-            RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(paginationParams.get('start_index'), paginatedBenefitPackages.size(), benefitPackages.size()));
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageListResponse(paginatedBenefitPackages), true));
+    System.assertEquals(0, response.size());
+    System.assertEquals(
+        '0-0/0',
+        RestContext.response.headers.get('Content-Range')
+    );
+}
 
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    new WebportalApiUtility_v1.ErrorMessage(
-                        String.valueOf(ex.status_code),
-                        ex.error,
-                        ex.error_description
-                    )
-                )
-            );
-        } catch(Exception ex) {
-            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
-            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
-            RestContext.response.statuscode = 500;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    new WebportalApiUtility_v1.ErrorMessage(
-                        '500',
-                        'Internal Server Error',
-                        'Unexpected error retrieving benefit packages: ' + ex.getMessage()
-                    )
-                )
-            );
-        }
-    }
+@isTest
+static void testUnauthorizedGET() {
 
-    private static List<SimplifiedBenefitPackage> buildBenefitPackageListResponse(List<ServiceContract> contracts) {
-        List<SimplifiedBenefitPackage> response = new List<SimplifiedBenefitPackage>();
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+    RestContext.request.httpMethod = 'GET';
 
-        for (ServiceContract contract : contracts) {
-            SimplifiedBenefitPackage item = new SimplifiedBenefitPackage();
+    RestContext.response = new RestResponse();
 
-            item.status = contract.Package_Status__c;
-            item.benefit_package_id = contract.Id;
-            item.product_reference = contract.Product_Reference__c;
-            item.active_start_at = contract.StartDate;
-            item.active_end_at = contract.EndDate;
-            item.amount_of_policies = Integer.valueOf(contract.Amount_of_Policies__c);
+    Test.startTest();
+    VOBPSalesBenefitPackages_V1.doGet();
+    Test.stopTest();
 
-            response.add(item);
-        }
+    System.assertEquals(401, RestContext.response.statusCode);
 
-        return response;
-    }
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage)
+        JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
 
-    public class SimplifiedBenefitPackage {
-        public String status;
-        public String benefit_package_id; 
-        public String product_reference; 
-        public Date active_start_at; 
-        public Date active_end_at; 
-        public Integer amount_of_policies;
-    }
+    System.assertEquals('401', response.status_code);
+    System.assertEquals('Unauthorized', response.error);
+    System.assertEquals(
+        'Header "authorization" is not a valid JSON Web Token.',
+        response.error_description
+    );
+}
+@isTest
+static void testSuccessGETListWithPagination() {
+
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+    RestContext.request.httpMethod = 'GET';
+    RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+    RestContext.request.addParameter('start_index', '1');
+    RestContext.request.addParameter('max_results', '1');
+
+    RestContext.response = new RestResponse();
+
+    Test.startTest();
+    VOBPSalesBenefitPackages_V1.doGet();
+    Test.stopTest();
+
+    List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage> response =
+        (List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage>)
+        JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            List<VOBPSalesBenefitPackages_V1.SimplifiedBenefitPackage>.class
+        );
+
+    System.assertEquals(200, RestContext.response.statusCode);
+    System.assertEquals(1, response.size());
+    System.assertEquals(
+        "1-1/3",
+        RestContext.response.headers.get("Content-Range")
+    );
+}
