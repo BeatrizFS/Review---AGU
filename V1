@@ -109,3 +109,23 @@ private static void updateBenefitPackageSubscription(
         delete subscription;
     }
 }
+
+
+List<Contact> agentRecords = [
+    SELECT Id, AccountId, FirstName, LastName, Email
+    FROM Contact
+    WHERE Id = :agentId
+      AND AccountId = :bankId
+      AND Account.RecordType.DeveloperName = 'Issuer_Bank'
+    LIMIT 1
+];
+
+if (agentRecords.isEmpty()) {
+    throw new WebportalApiUtility_v1.RequestAPIException(
+        404,
+        'Not Found',
+        'The searched resource was not found.'
+    );
+}
+
+Contact agent = agentRecords[0];
