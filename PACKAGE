@@ -1,91 +1,13 @@
-private static void handleGet() {
-    try {
-        RestContext.response.addHeader('Content-Type', 'application/json');
+    public static String getContentRangeHeader(Integer rangeStart, Integer rangeEnd, Integer size) {
+        String contentRange;
 
-        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-            RestContext.request,
-            new Set<String>{
-                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
-                'urn:axa.partners.benefits_platform.read_only'
-            }
-        );
-
-        Map<String, String> requestParams = RestContext.request.params;
-        Map<String, Integer> paginationParams =
-            WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
-
-        Integer startIndex = paginationParams.get('start_index');
-        Integer maxResults = paginationParams.get('max_results');
-
-        List<ServiceContract> benefitPackages = [
-            SELECT
-                Id,
-                Package_Status__c,
-                Product_Reference__c,
-                StartDate,
-                EndDate,
-                Amount_of_Policies__c
-            FROM ServiceContract
-            ORDER BY CreatedDate DESC
-        ];
-
-        List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
-
-        if (!benefitPackages.isEmpty()) {
-            paginatedBenefitPackages =
-                WebportalApiUtility_v1.getPaginatedSObject(
-                    benefitPackages,
-                    startIndex,
-                    maxResults,
-                    benefitPackages.size()
-                );
+        if(rangeEnd == 0) {
+            contentRange = '0-0/' + String.valueOf(size);
+        } else if(size > rangeEnd) {
+            contentRange = String.valueOf(rangeStart + '-' +  (rangeStart + rangeEnd - 1) + '/' + size); 
+        } else {
+            contentRange = String.valueOf(rangeStart + '-' + (size - 1) + '/' + size);
         }
 
-        RestContext.response.statusCode = 200;
-        RestContext.response.addHeader(
-            'Content-Range',
-            WebportalApiUtility_v1.getContentRangeHeader(
-                startIndex,
-                paginatedBenefitPackages.size(),
-                benefitPackages.size()
-            )
-        );
-
-        RestContext.response.responseBody = Blob.valueOf(
-            JSON.serializePretty(
-                buildBenefitPackageListResponse(paginatedBenefitPackages),
-                true
-            )
-        );
-
-    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-
-        RestContext.response.statusCode = ex.status_code;
-        RestContext.response.responseBody = Blob.valueOf(
-            JSON.serializePretty(
-                new WebportalApiUtility_v1.ErrorMessage(
-                    String.valueOf(ex.status_code),
-                    ex.error,
-                    ex.error_description
-                ),
-                true
-            )
-        );
-
-    } catch (Exception ex) {
-
-        System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-
-        RestContext.response.statusCode = 500;
-        RestContext.response.responseBody = Blob.valueOf(
-            JSON.serializePretty(
-                new WebportalApiUtility_v1.ErrorMessage(
-                    '500',
-                    'Internal Server Error',
-                    'Unexpected error retrieving benefit packages.'
-                ),
-                true
-            )
-        );
+        return contentRange;
     }
-}
