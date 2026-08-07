@@ -1,168 +1,91 @@
-Esse é o código base
+private static void handleGet() {
+    try {
+        RestContext.response.addHeader('Content-Type', 'application/json');
 
-    public override void doGet(){
-		RestContext.response.addHeader('Content-Type', 'application/json');
-        Boolean hasBeenAuthenticated = false;
-        Boolean areValidParams = false;
-        string customerId = RestContext.request.params.get('customer_id');
-        Map<String, String> queryParameters = RestContext.request.params;
-        Map<String, Integer> validatedPaginatedParams;
-
-        try {
-			WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData = WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(RestContext.Request, new Set<string>{'urn:axa.partners.sales.individual.certificates.write'});
-			WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig = WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
-
-            if (!Test.isRunningTest()) {
-               WebportalAPITokenAuthentication_v1.validateClientAccess(clientAccessConfig, customerId, accessTokenData);
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                'urn:axa.partners.benefits_platform.read_only'
             }
+        );
 
-            validatedPaginatedParams = WebportalApiUtility_v1.validatePaginationQueryParams(queryParameters, 100);
+        Map<String, String> requestParams = RestContext.request.params;
+        Map<String, Integer> paginationParams =
+            WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
 
-            hasBeenAuthenticated = true;
-            areValidParams = true;
-        } catch( WebportalApiUtility_v1.RequestAPIException ex ) {
-            RestContext.response.statuscode = ex.status_code;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error, ex.error_description)));
-        }
+        Integer startIndex = paginationParams.get('start_index');
+        Integer maxResults = paginationParams.get('max_results');
 
-		if( hasBeenAuthenticated && areValidParams ) {
-			string binNumber = extractBinFromRequest(RestContext.request.params.get('policy_id'));
-			if( String.isBlank( customerId ) ) {
-				RestContext.response.statuscode = 400;
-				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Id is required')));
-			} else if( !WebportalApiUtility_v1.isValidCustomerID(customerId) ) {
-				RestContext.response.statuscode = 400;
-				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Id is invalid')));
-            } else if( String.isNotBlank( binNumber ) && !WebportalApiUtility_v1.isValidBINNumber(binNumber) ) {
-				RestContext.response.statuscode = 400;
-				RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'BIN Number is invalid')));
-            } else {
-				Account existingCustomer = WebportalApiUtility_v1.getUserByCustomerId(customerId);
-				if( existingCustomer == null ) {
-					RestContext.response.statuscode = 400;
-					RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'bad_request', 'Customer Not Found')));
-				} else {
-					List<Case> claims;
-                    Boolean validBINNumber = true;
-                    String language = RestContext.request.headers.get('Accept-Language');
+        List<ServiceContract> benefitPackages = [
+            SELECT
+                Id,
+                Package_Status__c,
+                Product_Reference__c,
+                StartDate,
+                EndDate,
+                Amount_of_Policies__c
+            FROM ServiceContract
+            ORDER BY CreatedDate DESC
+        ];
 
-					if( String.isNotBlank( binNumber ) && binNumber.length() == 10 ) {
-                        try {
-                            VG_BankIdentificationNumber__c bin = WebportalApiUtility_v1.getBIN(binNumber);
-                            claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND Bin__c = :bin.Id AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
-                        } catch( WebportalApiUtility_v1.RequestAPIException ex ) {
-                            validBINNumber = false;
-                        }
-					} else if( String.isNotBlank( binNumber ) && binNumber.length() == 16 ) {
-                        List<MN_Account_BIN__c> accountBINs = [SELECT Id, BIN__c, Customer__c FROM MN_Account_BIN__c WHERE Credit_Card_Token__c = :binNumber AND Customer__r.Customer_Identifier__c = :customerId];
-                        if( accountBINs.size() == 0 ) {
-                            validBINNumber = false;
-                        } else {
-                            MN_Account_BIN__c accountBIN = accountBINs[0];
-                            claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND Bin__c = :accountBIN.BIN__c AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
-                        }
-                    } else if( String.isBlank( binNumber ) ) {
-						claims = [SELECT Id, CaseNumber, RecordType.Name, Status, Status__c, CreatedDate, Case_Benefit__c, Case_Benefit__r.External_Reference__c, Case_Benefit__r.Benefit_Name_EN__c, Case_Benefit__r.Benefit_Name_ES__c, Case_Benefit__r.Benefit_Name_pt_BR__c FROM Case WHERE Account.Customer_Identifier__c = :customerId AND RecordType.DeveloperName != 'Informational' ORDER BY CreatedDate DESC LIMIT 50000];
-					}
+        List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
 
-                    if( !validBINNumber ) {
-                        RestContext.response.statuscode = 404;
-                        RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'not_found', 'BIN Number Not Found')));
-                    } else {
-                        List<ClaimsResponse> responses = new List<ClaimsResponse>();
-                        List<Case> paginatedClaims = WebportalApiUtility_v1.getPaginatedSObject(claims, validatedPaginatedParams.get('start_index'), validatedPaginatedParams.get('max_results'), claims.size());
-                        Map<String, Status> claimStatusesMap = getClaimStatus(paginatedClaims);
-
-                        for(Case claim : paginatedClaims) {
-                            ClaimsResponse response = new ClaimsResponse();
-                            response.claim_id = claim.Id;
-                            response.claim_number = claim.CaseNumber;
-                            response.claim_type_id = claim.Case_Benefit__c;
-                            response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_EN__c;
-
-                            if(language != null) {
-                                if( language.containsIgnoreCase('pt') ) {
-                                    response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_pt_BR__c;
-                                } else if( language.containsIgnoreCase('es')) {
-                                    response.claim_type_name = claim.Case_Benefit__r.Benefit_Name_ES__c;
-                                }
-                            }
-
-                            response.benefit_external_reference = claim.Case_Benefit__r.External_Reference__c;
-                            response.created_at = String.valueOf( claim.CreatedDate );
-                            response.status = claim.Status;
-
-                            if(claimStatusesMap.containsKey(claim.Id)) {
-                                response.statuses = claimStatusesMap.get( claim.Id );
-                            }
-
-                            responses.add(response);
-                        }
-
-                        RestContext.response.statuscode = 206;
-                        RestContext.response.addHeader('Content-Range', WebportalApiUtility_v1.getContentRangeHeader(validatedPaginatedParams.get('start_index'), paginatedClaims.size(), claims.size()));
-                        RestContext.response.responseBody = Blob.valueOf( JSON.serializePretty( responses ) );
-                    }
-
-devemos segui isso com boas praticas para esse de baixo 
-    private static void handleGet() {
-        try {
-            RestContext.response.addHeader('Content-Type', 'application/json');
-
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext.request,
-                new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
-                    'urn:axa.partners.benefits_platform.read_only'
-                }
-            );
-
-            Map<String, String> requestParams = RestContext.request.params;
-            Map<String, Integer> paginationParams = WebportalApiUtility_v1.validatePaginationQueryParams(requestParams, 100);
-            
-            List<ServiceContract> benefitPackages = [
-                SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate, Amount_of_Policies__c
-                FROM ServiceContract
-                ORDER BY CreatedDate DESC
-            ];
-            
-            List<ServiceContract> paginatedBenefitPackages = new List<ServiceContract>();
-            if (!benefitPackages.isEmpty()) {
-                paginatedBenefitPackages = WebportalApiUtility_v1.getPaginatedSObject(
+        if (!benefitPackages.isEmpty()) {
+            paginatedBenefitPackages =
+                WebportalApiUtility_v1.getPaginatedSObject(
                     benefitPackages,
-                    paginationParams.get('start_index'),
-                    paginationParams.get('max_results'),
+                    startIndex,
+                    maxResults,
                     benefitPackages.size()
                 );
-            }
-
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    buildBenefitPackageListResponse(paginatedBenefitPackages),
-                    true
-                )
-            );
-        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statuscode = ex.status_code;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    new WebportalApiUtility_v1.ErrorMessage(
-                        String.valueOf(ex.status_code),
-                        ex.error, ex.error_description),
-                        true
-                    )
-                );
-        } catch (Exception ex) {
-            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(
-                        '500',
-                        'Internal Server Error',
-                        'Unexpected error retrieving benefit packages.'
-                    )
-                )
-            );
         }
+
+        RestContext.response.statusCode = 200;
+        RestContext.response.addHeader(
+            'Content-Range',
+            WebportalApiUtility_v1.getContentRangeHeader(
+                startIndex,
+                paginatedBenefitPackages.size(),
+                benefitPackages.size()
+            )
+        );
+
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                buildBenefitPackageListResponse(paginatedBenefitPackages),
+                true
+            )
+        );
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+
+        RestContext.response.statusCode = ex.status_code;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    String.valueOf(ex.status_code),
+                    ex.error,
+                    ex.error_description
+                ),
+                true
+            )
+        );
+
+    } catch (Exception ex) {
+
+        System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error retrieving benefit packages.'
+                ),
+                true
+            )
+        );
     }
+}
