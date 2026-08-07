@@ -101,3 +101,107 @@
         public Date active_end_at; 
         public Integer amount_of_policies;
     }
+
+
+--------------
+
+private static void handleGet() {
+    try {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                'urn:axa.partners.benefits_platform.read_only'
+            }
+        );
+
+        Map<String, String> requestParams = RestContext.request.params;
+        Map<String, Integer> paginationParams =
+            WebportalApiUtility_v1.validatePaginationQueryParams(
+                requestParams,
+                100
+            );
+
+        List<ServiceContract> benefitPackages = [
+            SELECT
+                Id,
+                Package_Status__c,
+                Product_Reference__c,
+                StartDate,
+                EndDate,
+                Amount_of_Policies__c
+            FROM ServiceContract
+            ORDER BY CreatedDate DESC
+        ];
+
+        List<ServiceContract> paginatedBenefitPackages =
+            WebportalApiUtility_v1.getPaginatedSObject(
+                benefitPackages,
+                paginationParams.get('start_index'),
+                paginationParams.get('max_results'),
+                benefitPackages.size()
+            );
+
+        RestContext.response.statusCode = 200;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                buildBenefitPackageListResponse(paginatedBenefitPackages),
+                true
+            )
+        );
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+
+        RestContext.response.statusCode = ex.status_code;
+
+        if (ex.status_code == 401) {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '401',
+                        'Unauthorized',
+                        'Header "authorization" is not a valid JSON Web Token.'
+                    )
+                )
+            );
+        } else if (ex.status_code == 403) {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '403',
+                        'Forbidden',
+                        'The right to access this endpoint has not been granted in the JSON Web Token.'
+                    )
+                )
+            );
+        } else {
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error,
+                        ex.error_description
+                    ),
+                    true
+                )
+            );
+        }
+
+    } catch (Exception ex) {
+
+        System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error retrieving benefit packages.'
+                )
+            )
+        );
+    }
+}
