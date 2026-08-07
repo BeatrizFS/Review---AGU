@@ -1,257 +1,48 @@
-private static BenefitPackage buildBenefitPackageResponse(
-    ServiceContract contract,
-    AffectedPolicyRange affectedPolicyRange,
-    List<CoreBenefit> coreBenefits,
-    List<OptionalBenefit> optionalBenefits,
-    List<LegalConsentItem> legalConsents
-) {
-
-    BenefitPackage response = new BenefitPackage();
-
-    response.benefit_package_id = contract.Id;
-    response.product_reference = contract.Product_Reference__c;
-    response.active_start_at = contract.StartDate;
-    response.active_end_at = contract.EndDate;
-    response.amount_of_policies = Integer.valueOf(contract.Amount_of_Policies__c);
-
-    response.affected_policy_range = affectedPolicyRange;
-    response.core_benefits = coreBenefits;
-    response.optional_benefits = optionalBenefits;
-    response.legal_consents = legalConsents;
-
-    return response;
-}
-
-ServiceContract contract = getBenefitPackage(benefitPackageId);
-
-AffectedPolicyRange affectedPolicyRange =
-    buildAffectedPolicyRange(contract);
-
-List<CoreBenefit> coreBenefits =
-    buildCoreBenefits(contract);
-
-List<OptionalBenefit> optionalBenefits =
-    buildOptionalBenefits(contract);
-
-List<LegalConsentItem> legalConsents =
-    buildLegalConsents(contract);
-
-BenefitPackage response =
-    buildBenefitPackageResponse(
-        contract,
-        affectedPolicyRange,
-        coreBenefits,
-        optionalBenefits,
-        legalConsents
-    );
-
-private static AffectedPolicyRange buildAffectedPolicyRange(ServiceContract contract) {
-
-    AffectedPolicyRange response = new AffectedPolicyRange();
-
-    response.external_number_start_at = contract.External_Number_Start_At__c;
-    response.external_number_end_at = contract.External_Number_End_At__c;
-
-    return response;
-}
-
-no get
-
-AffectedPolicyRange affectedPolicyRange =
-    buildAffectedPolicyRange(contract);
-
-BenefitPackage response = buildBenefitPackageResponse(
-    contract,
-    affectedPolicyRange,
-    coreBenefits,
-    optionalBenefits,
-    legalConsents
-);
-
-private static List<MN_Product_Benefit__c> getProductBenefits(Id productVersionId) {
-    return [
-        SELECT
-            Benefit__r.Benefit_Record_Type__c,
-            Benefit__r.Name,
-            Benefit__r.Benefit_Description__c,
-            Benefit__r.External_Reference__c
-        FROM MN_Product_Benefit__c
-        WHERE Product__c = :productVersionId
-            AND Benefit__r.Benefit_Record_Type__c != null
-            AND Benefit__r.Web_Portal__c = true
-            AND Benefit__r.Active__c = true
-    ];
-}
-
-private static List<CoreBenefit> buildCoreBenefits(
-    List<MN_Product_Benefit__c> productBenefits
-) {
-    List<CoreBenefit> response = new List<CoreBenefit>();
-
-    for (MN_Product_Benefit__c productBenefit : productBenefits) {
-
-        CoreBenefit benefit = new CoreBenefit();
-
-        benefit.benefit_id = productBenefit.Benefit__r.Benefit_Record_Type__c;
-        benefit.name = productBenefit.Benefit__r.Name;
-
-        response.add(benefit);
-    }
-
-    return response;
-}
-
-private static List<OptionalBenefit> buildOptionalBenefits(
-    List<MN_BINRange_Benefit__c> optionalBenefits
-) {
-    List<OptionalBenefit> response = new List<OptionalBenefit>();
-
-    for (MN_BINRange_Benefit__c optionalBenefit : optionalBenefits) {
-
-        OptionalBenefit benefit = new OptionalBenefit();
-
-        benefit.benefit_id = optionalBenefit.Benefit__r.Benefit_Record_Type__c;
-        benefit.name = optionalBenefit.Benefit__r.Name;
-        benefit.description = optionalBenefit.Benefit__r.Benefit_Description__c;
-
-        response.add(benefit);
-    }
-
-    return response;
-}
-
-private static ServiceContract getBenefitPackage(Id benefitPackageId)
-
-private static List<MN_Product_Benefit__c> getCoreBenefitRecords(ServiceContract benefitPackage)
-
-private static List<MN_BINRange_Benefit__c> getOptionalBenefitRecords(ServiceContract benefitPackage)
-
-private static Set<String> getBenefitsToExclude(ServiceContract benefitPackage)
-
-private static List<Legal_Consent__c> getLegalConsents(ServiceContract benefitPackage)
-
-private static BenefitPackage buildBenefitPackageResponse(...)
-
-private static AffectedPolicyRange buildAffectedPolicyRange(...)
-
-private static List<CoreBenefit> buildCoreBenefits(...)
-
-private static List<OptionalBenefit> buildOptionalBenefits(...)
-
-private static List<LegalConsentItem> buildLegalConsents(...)
-
------------
-
-SELECT BIN_Range__r.Benefit_Coverage__c, BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c 
-                                                               FROM MN_BINRange_Benefit__c 
-                                                               WHERE Benefit__c = :benefitId AND BIN_Range__r.IIN_Number__c = :bin.BIN_6FirstDigits__c
-------------------
-
-private static ServiceContract getBenefitPackage(Id benefitPackageId) {
-    List<ServiceContract> benefitPackages = [
-        SELECT
-            Id,
-            Product__c,
-            Package_Status__c,
-            Product_Reference__c,
-            StartDate,
-            EndDate,
-            Amount_of_Policies__c,
-            Code__c,
-            Is_Confirmed__c,
-            Consented_At__c
-        FROM ServiceContract
-        WHERE Id = :benefitPackageId
-        LIMIT 1
-    ];
-
-    return benefitPackages.isEmpty() ? null : benefitPackages[0];
-}
-
-
-private static List<MN_Product_Benefit__c> getCoreBenefitRecords(ServiceContract benefitPackage) {
-
-    return [
-        SELECT
-            Benefit__c,
-            Benefit__r.Name,
-            Benefit__r.External_Reference__c,
-            Benefit__r.Benefit_Description__c,
-            Benefit__r.Benefit_Record_Type__c
-        FROM MN_Product_Benefit__c
-        WHERE Product__c = :benefitPackage.Product__c
-            AND Benefit__r.Web_Portal__c = true
-            AND Benefit__r.Active__c = true
-    ];
-}
-
-private static List<MN_BINRange_Benefit__c> getOptionalBenefitRecords(
-    String iinNumber
-) {
-
-    return [
-        SELECT
-            Benefit__c,
-            Benefit__r.Name,
-            Benefit__r.External_Reference__c,
-            Benefit__r.Benefit_Description__c,
-            Benefit__r.Benefit_Record_Type__c,
-            Remove_Core_Benefit__c,
-            BIN_Range__r.Min_Bin_Range_Enc__c,
-            BIN_Range__r.Max_Bin_Range_Enc__c
-        FROM MN_BINRange_Benefit__c
-        WHERE BIN_Range__r.IIN_Number__c = :iinNumber
-    ];
-}
-
-private static List<LegalConsentItem> getLegalConsents(
-    ServiceContract benefitPackage
-) {
-
-    List<LegalConsentItem> response = new List<LegalConsentItem>();
-
-    LegalConsentItem consent = new LegalConsentItem();
-
-    consent.code = benefitPackage.Code__c;
-    consent.is_confirmed = benefitPackage.Is_Confirmed__c;
-    consent.consented_at = String.valueOf(benefitPackage.Consented_At__c);
-
-    response.add(consent);
-
-    return response;
-}
-
 @RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
-global with sharing class VOBPSalesBenefitPackagesDetails_V1{
+global with sharing class VOBPSalesBenefitPackagesDetails_V1 {
 
+    @HttpGet
     global static void doGet() {
         handleGet();
     }
 
-    global static void handleGet() {
-
-    }
-
-    private static void handleGetDetails() {
-
-        RestContext.response.addHeader('Content-Type','application/json');
-
+    private static void handleGet() {
         try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
 
-            authenticate();
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                    'urn:axa.partners.benefits_platform.read_only'
+                }
+            );
 
             Id benefitPackageId = getBenefitPackageId();
 
-            ServiceContract contract = (benefitPackageId);
+            ServiceContract benefitPackage = getBenefitPackage(benefitPackageId);
 
-            if(contract == null){
-                throw new WebportalApiUtility_v1.RequestAPIException(404, 'not_found', 'Benefit package not found.');
+            if (benefitPackage == null) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    404,
+                    'Not Found',
+                    'The searched resource was not found.'
+                );
             }
 
+            /*
+             * Próximos passos:
+             *
+             * AffectedPolicyRange affectedPolicyRange = ...
+             * List<CoreBenefit> coreBenefits = ...
+             * List<OptionalBenefit> optionalBenefits = ...
+             * List<LegalConsentItem> legalConsents = ...
+             */
+
             RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageResponse(contract),true));
 
         } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+
             RestContext.response.statusCode = ex.status_code;
             RestContext.response.responseBody = Blob.valueOf(
                 JSON.serializePretty(
@@ -259,47 +50,82 @@ global with sharing class VOBPSalesBenefitPackagesDetails_V1{
                         String.valueOf(ex.status_code),
                         ex.error,
                         ex.error_description
-                    )
+                    ),
+                    true
                 )
             );
-        } catch(Exception ex) {
-            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
-            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
-            RestContext.response.statuscode = 500;
+
+        } catch (Exception ex) {
+
+            System.debug(LoggingLevel.ERROR, ex.getStackTraceString());
+
+            RestContext.response.statusCode = 500;
             RestContext.response.responseBody = Blob.valueOf(
                 JSON.serializePretty(
                     new WebportalApiUtility_v1.ErrorMessage(
                         '500',
                         'Internal Server Error',
-                        'Unexpected error retrieving benefit packages: ' + ex.getMessage()
-                    )
+                        'Unexpected error retrieving benefit package.'
+                    ),
+                    true
                 )
             );
         }
     }
 
-    private static ServiceContract getBenefitPackageId(Id benefitPackageId){
-        List<ServiceContract> benefitPackages = [
-            SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate, Amount_of_Policies__c 
-            FROM ServiceContract
-            WHERE Id =:benefitPackageId
-            LIMIT 1
-        ];
+    private static Id getBenefitPackageId() {
 
-        return benefitPackageId.isEmpty() ? null : benefitPackages[0];
+        String requestUri = RestContext.request.requestURI;
+        String benefitPackageId = requestUri.substringAfter('/benefit_packages/');
+
+        if (String.isBlank(benefitPackageId)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'The input information received were not compliant with the endpoint specification.'
+            );
+        }
+
+        return (Id) benefitPackageId;
     }
 
+    private static ServiceContract getBenefitPackage(Id benefitPackageId) {
+        // próximo passo
+        return null;
+    }
 
     public class BenefitPackage {
         public String status;
-        public String benefit_package_id; 
-        public String product_reference; 
-        public Date active_start_at; 
-        public Date active_end_at; 
+        public String benefit_package_id;
+        public String product_reference;
+        public Date active_start_at;
+        public Date active_end_at;
         public Integer amount_of_policies;
         public AffectedPolicyRange affected_policy_range;
         public List<CoreBenefit> core_benefits;
         public List<OptionalBenefit> optional_benefits;
         public List<LegalConsentItem> legal_consents;
-    }    
+    }
+
+    public class AffectedPolicyRange {
+        public String external_number_start_at;
+        public String external_number_end_at;
+    }
+
+    public class CoreBenefit {
+        public String benefit_id;
+        public String name;
+    }
+
+    public class OptionalBenefit {
+        public String benefit_id;
+        public String name;
+        public String description;
+    }
+
+    public class LegalConsentItem {
+        public String code;
+        public Boolean is_confirmed;
+        public String consented_at;
+    }
 }
