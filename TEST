@@ -72,3 +72,172 @@ private static List<MN_BINRange_Benefit__c> getOptionalBenefitRecords(
             AND Benefit__r.Benefit_Record_Type__c != null
     ];
 }
+===============
+==========
+====================================
+
+private class ResolvedBenefits {
+
+    public List<MN_Product_Benefit__c> coreBenefits;
+    public List<MN_BINRange_Benefit__c> optionalBenefits;
+
+    public ResolvedBenefits() {
+        coreBenefits = new List<MN_Product_Benefit__c>();
+        optionalBenefits = new List<MN_BINRange_Benefit__c>();
+    }
+}
+
+private static ResolvedBenefits resolveBenefits(
+    ServiceContract benefitPackage,
+    List<MN_Product_Benefit__c> coreBenefitRecords,
+    List<MN_BINRange_Benefit__c> optionalBenefitRecords
+) {
+
+    // regra de negócio
+
+}
+
+private static ResolvedBenefits resolveBenefits(
+    ServiceContract benefitPackage,
+    List<MN_Product_Benefit__c> coreBenefitRecords,
+    List<MN_BINRange_Benefit__c> optionalBenefitRecords
+) {
+
+    ResolvedBenefits response = new ResolvedBenefits();
+
+    // Próximos passos:
+    // 1. Criar mapas de Core e Optional.
+    // 2. Aplicar Country Exception.
+    // 3. Aplicar Remove_Core_Benefit.
+    // 4. Remover duplicidades.
+    // 5. Popular o wrapper.
+
+    return response;
+}
+
+
+======================================================================
+
+private static ResolvedBenefits resolveBenefits(
+    ServiceContract benefitPackage,
+    List<MN_Product_Benefit__c> coreBenefitRecords,
+    List<MN_BINRange_Benefit__c> optionalBenefitRecords
+) {
+
+    ResolvedBenefits response = new ResolvedBenefits();
+
+    Map<Id, MN_Product_Benefit__c> coreBenefitsMap =
+        new Map<Id, MN_Product_Benefit__c>();
+
+    Map<Id, MN_BINRange_Benefit__c> optionalBenefitsMap =
+        new Map<Id, MN_BINRange_Benefit__c>();
+
+    /*
+     * 1. Adiciona todos os Core Benefits
+     */
+    for (MN_Product_Benefit__c productBenefit : coreBenefitRecords) {
+        coreBenefitsMap.put(
+            productBenefit.Benefit__c,
+            productBenefit
+        );
+    }
+
+    /*
+     * 2. TODO
+     * Aplicar Benefit_Country_Exception__c
+     */
+
+    /*
+     * 3. Processar Optional Benefits
+     */
+    for (MN_BINRange_Benefit__c optionalBenefit : optionalBenefitRecords) {
+
+        if (optionalBenefit.Remove_Core_Benefit__c) {
+
+            coreBenefitsMap.remove(optionalBenefit.Benefit__c);
+
+        } else if (!coreBenefitsMap.containsKey(optionalBenefit.Benefit__c)) {
+
+            optionalBenefitsMap.put(
+                optionalBenefit.Benefit__c,
+                optionalBenefit
+            );
+
+        }
+    }
+
+    /*
+     * 4. Popular o wrapper
+     */
+    response.coreBenefits.addAll(coreBenefitsMap.values());
+    response.optionalBenefits.addAll(optionalBenefitsMap.values());
+
+    return response;
+}
+=======================================================================
+=======================================================================
+=======================================================================
+
+
+private static ResolvedBenefits resolveBenefits(
+    ServiceContract benefitPackage,
+    List<MN_Product_Benefit__c> coreBenefitRecords,
+    List<MN_BINRange_Benefit__c> optionalBenefitRecords
+) {
+
+    ResolvedBenefits response = new ResolvedBenefits();
+
+    Map<Id, MN_Product_Benefit__c> coreBenefitsMap =
+        new Map<Id, MN_Product_Benefit__c>();
+
+    Map<Id, MN_BINRange_Benefit__c> optionalBenefitsMap =
+        new Map<Id, MN_BINRange_Benefit__c>();
+
+    Set<Id> benefitsToRemove = getBenefitsToExclude(benefitPackage);
+
+    /*
+     * Core Benefits
+     */
+    for (MN_Product_Benefit__c productBenefit : coreBenefitRecords) {
+
+        if (!benefitsToRemove.contains(productBenefit.Benefit__c)) {
+
+            coreBenefitsMap.put(
+                productBenefit.Benefit__c,
+                productBenefit
+            );
+
+        }
+    }
+
+    /*
+     * Optional Benefits
+     */
+    for (MN_BINRange_Benefit__c optionalBenefit : optionalBenefitRecords) {
+
+        if (benefitsToRemove.contains(optionalBenefit.Benefit__c)) {
+            continue;
+        }
+
+        if (!coreBenefitsMap.containsKey(optionalBenefit.Benefit__c)
+            && !optionalBenefit.Remove_Core_Benefit__c) {
+
+            optionalBenefitsMap.put(
+                optionalBenefit.Benefit__c,
+                optionalBenefit
+            );
+        }
+
+        if (optionalBenefitsMap.containsKey(optionalBenefit.Benefit__c)
+            && optionalBenefit.Remove_Core_Benefit__c) {
+
+            optionalBenefitsMap.remove(optionalBenefit.Benefit__c);
+            benefitsToRemove.add(optionalBenefit.Benefit__c);
+        }
+    }
+
+    response.coreBenefits.addAll(coreBenefitsMap.values());
+    response.optionalBenefits.addAll(optionalBenefitsMap.values());
+
+    return response;
+}
