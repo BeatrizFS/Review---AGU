@@ -1,4 +1,17 @@
-    @AuraEnabled
+private static AffectedPolicyRange buildAffectedPolicyRange(
+    ServiceContract benefitPackage
+) {
+
+    AffectedPolicyRange response = new AffectedPolicyRange();
+
+    response.external_number_start_at = benefitPackage.Policy_Range_Start__c;
+    response.external_number_end_at = benefitPackage.Policy_Range_End__c;
+
+    return response;
+}
+
+-===============================================
+@AuraEnabled
     public static BenefitsWrapper getBenefits(String creditCardToken, String binNumber) {
         try {
             if (String.isBlank(binNumber)) {
