@@ -1,0 +1,73 @@
+Classe revisada (ajustes finais)
+
+Ajustes aplicados: - Inclusão de Product__c no SOQL de
+getBenefitPackage(). - Padronização dos campos de Legal Consent: -
+Legal_Consent_Code__c - Legal_Consent_Confirmed__c -
+Legal_Consent_Date__c - Mantida a arquitetura discutida: - handleGet() -
+getBenefitPackage() - getCoreBenefitRecords() -
+getOptionalBenefitRecords() - resolveBenefits() -
+buildAffectedPolicyRange() - buildCoreBenefits() -
+buildOptionalBenefits() - buildLegalConsents() -
+buildBenefitPackageResponse()
+
+Observação: O método getBenefitsToExclude() foi desconsiderado conforme
+solicitado. Enquanto ele não existir, o resolveBenefits() deve trabalhar
+sem exclusões por país.
+
+Trechos revisados:
+
+private static ServiceContract getBenefitPackage(Id benefitPackageId) {
+
+    List<ServiceContract> benefitPackages = [
+        SELECT
+            Id,
+            Product__c,
+            Package_Status__c,
+            Product_Reference__c,
+            StartDate,
+            EndDate,
+            Amount_of_Policies__c,
+            Policy_Range_Start__c,
+            Policy_Range_End__c,
+            Legal_Consent_Code__c,
+            Legal_Consent_Confirmed__c,
+            Legal_Consent_Date__c
+        FROM ServiceContract
+        WHERE Id = :benefitPackageId
+        LIMIT 1
+    ];
+
+    return benefitPackages.isEmpty()
+        ? null
+        : benefitPackages[0];
+
+}
+
+private static List buildLegalConsents( ServiceContract benefitPackage )
+{
+
+    List<LegalConsentItem> response =
+        new List<LegalConsentItem>();
+
+    LegalConsentItem consent =
+        new LegalConsentItem();
+
+    consent.code =
+        benefitPackage.Legal_Consent_Code__c;
+
+    consent.is_confirmed =
+        benefitPackage.Legal_Consent_Confirmed__c;
+
+    consent.consented_at =
+        String.valueOf(
+            benefitPackage.Legal_Consent_Date__c
+        );
+
+    response.add(consent);
+
+    return response;
+
+}
+
+Demais métodos permanecem conforme a arquitetura construída durante a
+revisão.
