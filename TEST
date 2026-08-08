@@ -49,3 +49,26 @@
         }
     }
 
+=========================
+
+private static List<MN_BINRange_Benefit__c> getOptionalBenefitRecords(
+    ServiceContract benefitPackage
+) {
+    return [
+        SELECT
+            Benefit__c,
+            Benefit__r.Name,
+            Benefit__r.External_Reference__c,
+            Benefit__r.Benefit_Description__c,
+            Benefit__r.Benefit_Record_Type__c,
+            Remove_Core_Benefit__c,
+            BIN_Range__r.Min_Bin_Range_Enc__c,
+            BIN_Range__r.Max_Bin_Range_Enc__c
+        FROM MN_BINRange_Benefit__c
+        WHERE BIN_Range__r.Min_Bin_Range_Enc__c >= :benefitPackage.Policy_Range_Start__c
+            AND BIN_Range__r.Max_Bin_Range_Enc__c <= :benefitPackage.Policy_Range_End__c
+            AND Benefit__r.Web_Portal__c = true
+            AND Benefit__r.Active__c = true
+            AND Benefit__r.Benefit_Record_Type__c != null
+    ];
+}
