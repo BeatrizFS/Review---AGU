@@ -1,33 +1,32 @@
-    private static void handleAgentGet(String bankId, String agentId) {
-        try {
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/products')
+global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigAPIBase_V1 {
+
+    @HttpGet
+    global static void doGet() {
+        try{
             RestContext.response.addHeader('Content-Type', 'application/json');
 
             WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
                 WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
                     RestContext.request,
                     new Set<String>{
-                        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.banks.agents.read_only'
+                        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only'
                     }
                 );
+                
+            BenefitsConfigAPIBase_V1.AgentContext context = authorizeAgent(SCOPE_READ);
 
-            String requestUri = RestContext.request.requestURI;
-            String bankId = requestUri.substringBetween('/banks/', '/agents/');
-            String agentId = requestUri.substringAfter('/agents/');
+            if (context == null) return;
 
-            if (String.isBlank(bankId) || String.isBlank(agentId)) {
-                throw new WebportalApiUtility_v1.RequestAPIException(400,'Bad Request','The input information received were not compliant with the endpoint specification.');
-            }
+            List<MN_Product_Benefit__c> coreBenefits = fetchCoreBenefits();
+            List<MN_BINRange_Benefit__c> optionalBenefits = fetchOptionalBenefits(context.bankAccountId);
+            List<ProductResponse> result = buildResponse(coreBenefits, optionalBenefits);
 
-            List<Contact> agentRecords = [SELECT Id, FirstName, LastName, Email FROM Contact WHERE Id = :agentId AND AccountId = :bankId AND Account.RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
-
-            if (agentRecords.isEmpty()) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404,'Not Found','The searched resource was not found.');
-            }
-
-            Contact agentRecord = agentRecords[0];
+            // TODO: aplicar JWE encrypt via JSONWebEncryption usando Client_Key__c
+            // resolvido por context.clientId
 
             RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildAgentResponse(agentRecord), true));
+            RestContext.response.responseBody = Blob.valueOf(JSON.serialize(result));
 
         } catch(WebportalApiUtility_v1.RequestAPIException ex) {
             RestContext.response.statusCode = ex.status_code;
@@ -44,4 +43,145 @@
             RestContext.response.statusCode = 500;
             RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500','Internal Server Error','Unexpected error retrieving agent information.')));
         }
+
     }
+
+    // CORE BENEFITS
+    private static List<MN_Product_Benefit__c> fetchCoreBenefits() {
+        return [
+            SELECT
+                Product__r.Key__c,
+                Product__r.Name,
+                Benefit__c,
+                Benefit__r.Visa_External_Reference__c,
+                Benefit__r.Name
+            FROM MN_Product_Benefit__c
+            WHERE Benefit__r.Active__c = true
+              AND Benefit__r.Visa_External_Reference__c != null
+            LIMIT 100
+        ];
+    }
+
+    // OPTIONAL BENEFITS
+    private static List<MN_BINRange_Benefit__c> fetchOptionalBenefits(Id bankAccountId) {
+        List<VG_BankIdentificationNumber__c> bins = [
+            SELECT BIN_6FirstDigits__c
+            FROM VG_BankIdentificationNumber__c
+            WHERE Bank__c = :bankAccountId
+        ];
+
+        Set<String> iinNumbers = new Set<String>();
+
+        for (VG_BankIdentificationNumber__c bin : bins) {
+            iinNumbers.add(bin.BIN_6FirstDigits__c);
+        }
+
+        return [
+            SELECT
+                Id,
+                Benefit__c,
+                Benefit__r.Visa_External_Reference__c,
+                Benefit__r.Name,
+                Benefit__r.Benefit_Description__c,
+                BIN_Range__r.IIN_Number__c,
+                BIN_Range__r.Product__r.Key__c,
+                BIN_Range__r.Product__r.Name,
+                Remove_Core_Benefit__c
+            FROM MN_BINRange_Benefit__c
+            WHERE BIN_Range__r.IIN_Number__c IN :iinNumbers
+              AND Benefit__r.Active__c = true
+              AND Benefit__r.Visa_External_Reference__c != null
+            WITH USER_MODE
+        ];
+    }
+
+    // RESPONSE BUILDER
+    private static List<ProductResponse> buildResponse(List<MN_Product_Benefit__c> coreBenefits, List<MN_BINRange_Benefit__c> optionalBenefits) {
+        Map<String, ProductResponse> productMap = new Map<String, ProductResponse>();
+        Map<String, Set<Id>> coreBenefitIdsByProduct = new Map<String, Set<Id>>();
+        Map<String, Set<Id>> optionalBenefitIdsByProduct = new Map<String, Set<Id>>();
+
+        // CORE
+        for (MN_Product_Benefit__c pb : coreBenefits) {
+            String productKey = pb.Product__r.Key__c;
+
+            if (!productMap.containsKey(productKey)) {
+                productMap.put(productKey, createProduct(productKey, pb.Product__r.Name));
+                coreBenefitIdsByProduct.put(productKey, new Set<Id>());
+            }
+
+            Set<Id> benefitIds = coreBenefitIdsByProduct.get(productKey);
+
+            if (!benefitIds.contains(pb.Benefit__c)) {
+                CoreBenefitResponse core = new CoreBenefitResponse();
+                core.benefit_id = pb.Benefit__r.Visa_External_Reference__c;
+                core.name = pb.Benefit__r.Name;
+
+                productMap.get(productKey) .core_benefits.add(core);
+
+                benefitIds.add(pb.Benefit__c);
+            }
+        }
+
+        // OPTIONAL
+        for (MN_BINRange_Benefit__c br : optionalBenefits) {
+            if (br.Remove_Core_Benefit__c) continue;
+
+            String productKey = br.BIN_Range__r.Product__r.Key__c;
+
+            if (!productMap.containsKey(productKey)) {
+                productMap.put(productKey, createProduct(productKey, br.BIN_Range__r.Product__r.Name));
+            }
+
+            if (!optionalBenefitIdsByProduct.containsKey(productKey)) {
+                optionalBenefitIdsByProduct.put(productKey, new Set<Id>());
+            }
+
+            Set<Id> benefitIds = optionalBenefitIdsByProduct.get(productKey);
+
+            if (!benefitIds.contains(br.Benefit__c)) {
+                OptionalBenefitResponse optional = new OptionalBenefitResponse();
+                optional.benefit_id = br.Benefit__r.Visa_External_Reference__c;
+                optional.name = br.Benefit__r.Name;
+                optional.description = br.Benefit__r.Benefit_Description__c;
+                // TODO: definir estrutura de cost
+                // optional.cost = buildCost(br);
+                productMap.get(productKey).optional_benefits.add(optional);
+                benefitIds.add(br.Benefit__c);
+            }
+        }
+
+        return productMap.values();
+    }
+
+    // PRODUCT RESPONSE BUILDER
+    private static ProductResponse createProduct(String productKey, String productName) {
+        ProductResponse product = new ProductResponse();
+        product.product_reference = productKey;
+        product.name = productName;
+        product.core_benefits = new List<CoreBenefitResponse>();
+        product.optional_benefits = new List<OptionalBenefitResponse>();
+        return product;
+    }
+
+    private class ProductResponse {
+        String product_reference;
+        String name;
+        List<CoreBenefitResponse> core_benefits;
+        List<OptionalBenefitResponse> optional_benefits;
+    }
+
+    private class CoreBenefitResponse {
+        String benefit_id;
+        String name;
+    }
+
+    private class OptionalBenefitResponse {
+        String benefit_id;
+        String name;
+        String description;
+
+        // TODO: definir cost
+        // Object cost;
+    }
+}
