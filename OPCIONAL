@@ -1,0 +1,391 @@
+SELECT Id, Benefit__r.Name, BIN_Range__r.Product__r.Name, BIN_Range__r.Product__r.Key__c FROM MN_BINRange_Benefit__c WHERE BIN_Range__r.Product__r.Key__c = 'P_C_MX'
+(Benefícios opcionais)
+
+fiz essa query porem alguns produtos vem com Benefit__c repetidos teria como não trazer repetidos?
+
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/products')
+global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigAPIBase_V1 {
+
+    private static final Set<String> SCOPE_READ = new Set<String>{
+        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only'
+    };
+    private static final Integer MAX_ITEMS = 100;
+
+    @HttpGet
+    global static void doGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        BenefitsConfigAPIBase_V1.AgentContext context = authorizeAgent(SCOPE_READ);
+        if (context == null) return;
+
+        String productReference = RestContext.request.params.get('product_reference');
+
+        List<MN_Product_Benefit__c>  coreBenefits     = fetchCoreBenefits(productReference);
+        List<MN_BINRange_Benefit__c> optionalBenefits = fetchOptionalBenefits(context.bankAccountId);
+        List<ProductResponse>        result           = buildResponse(coreBenefits, optionalBenefits, context.baseCurrency);
+
+        // TODO: aplicar JWE encrypt via JSONWebEncryption usando Client_Key__c resolvido por context.clientId
+        RestContext.response.statusCode = 200;
+        RestContext.response.responseBody = Blob.valueOf(JSON.serialize(result));
+    }
+
+    // ─── 1. Data fetching ────────────────────────────────────────────────────
+
+    private static List<MN_Product_Benefit__c> fetchCoreBenefits(String productReference) {
+        if (String.isNotBlank(productReference)) {
+            return [
+                SELECT Product__r.Key__c, Product__r.Name,
+                       Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c
+                FROM MN_Product_Benefit__c
+                WHERE Product__r.Key__c = :productReference
+                  AND Benefit__r.Active__c = true
+                  AND Benefit__r.Visa_External_Reference__c != null
+                WITH USER_MODE
+                LIMIT :MAX_ITEMS
+            ];
+        }
+        return [
+            SELECT Product__r.Key__c, Product__r.Name,
+                   Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c
+            FROM MN_Product_Benefit__c
+            WHERE Benefit__r.Active__c = true
+              AND Benefit__r.Visa_External_Reference__c != null
+            WITH USER_MODE
+            LIMIT :MAX_ITEMS
+        ];
+    }
+
+    private static List<MN_BINRange_Benefit__c> fetchOptionalBenefits(Id bankAccountId) {
+        List<VG_BankIdentificationNumber__c> bins = [
+            SELECT BIN_6FirstDigits__c, BIN_10FirstDigitsStdEnc__c
+            FROM VG_BankIdentificationNumber__c
+            WHERE Bank__c = :bankAccountId
+              AND Status__c = 'Approved'
+            WITH USER_MODE
+        ];
+        if (bins.isEmpty()) return new List<MN_BINRange_Benefit__c>();
+
+        Set<String> bin6Set = new Set<String>();
+        for (VG_BankIdentificationNumber__c b : bins) bin6Set.add(b.BIN_6FirstDigits__c);
+
+        List<MN_BINRange_Benefit__c> candidates = [
+            SELECT Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c,
+                   BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c,
+                   BIN_Range__r.IIN_Number__c, Remove_Core_Benefit__c,
+                   Coverage_structure__c  // TODO: confirmar valores do picklist (SIMPLE/USAGE/PERIOD?)
+                   /* Value_limit__c, Event_limit__c, Event_Quantity__c */ // TODO: confirmar mapeamento para cost
+            FROM MN_BINRange_Benefit__c
+            WHERE BIN_Range__r.IIN_Number__c IN :bin6Set
+              AND Benefit__r.Active__c = true
+              AND Benefit__r.Visa_External_Reference__c != null
+            WITH USER_MODE
+        ];
+
+        // Filtro de range — padrao confirmado em BenefitCoreAndOpcional e WebportalSalesBinProductBenefits_V1
+        List<MN_BINRange_Benefit__c> result = new List<MN_BINRange_Benefit__c>();
+        for (VG_BankIdentificationNumber__c bin : bins) {
+            for (MN_BINRange_Benefit__c br : candidates) {
+                if (bin.BIN_10FirstDigitsStdEnc__c >= br.BIN_Range__r.Min_Bin_Range_Enc__c
+                    && bin.BIN_10FirstDigitsStdEnc__c <= br.BIN_Range__r.Max_Bin_Range_Enc__c) {
+                    result.add(br);
+                }
+            }
+        }
+        return result;
+    }
+
+    // ─── 2. Response builder ─────────────────────────────────────────────────
+
+    private static List<ProductResponse> buildResponse(
+        List<MN_Product_Benefit__c>  coreBenefits,
+        List<MN_BINRange_Benefit__c> optionalBenefits,
+        String currency
+    ) {
+        Map<String, ProductResponse> productMap = new Map<String, ProductResponse>();
+        Set<String> coreRefs = new Set<String>();
+
+        for (MN_Product_Benefit__c pb : coreBenefits) {
+            String key = pb.Product__r.Key__c;
+            if (!productMap.containsKey(key)) {
+                ProductResponse pr    = new ProductResponse();
+                pr.product_reference  = key;
+                pr.name               = pb.Product__r.Name;
+                pr.core_benefits      = new List<CoreBenefitResponse>();
+                pr.optional_benefits  = new List<OptionalBenefitResponse>();
+                productMap.put(key, pr);
+            }
+            CoreBenefitResponse core = new CoreBenefitResponse();
+            core.benefit_id = pb.Benefit__r.Visa_External_Reference__c;
+            core.name       = pb.Benefit__r.Name;
+            productMap.get(key).core_benefits.add(core);
+            coreRefs.add(pb.Benefit__r.Visa_External_Reference__c);
+        }
+
+        for (MN_BINRange_Benefit__c br : optionalBenefits) {
+            if (br.Remove_Core_Benefit__c) continue;
+            if (coreRefs.contains(br.Benefit__r.Visa_External_Reference__c)) continue;
+
+            OptionalBenefitResponse opt = new OptionalBenefitResponse();
+            opt.benefit_id  = br.Benefit__r.Visa_External_Reference__c;
+            opt.name        = br.Benefit__r.Name;
+            opt.description = br.Benefit__r.Benefit_Description__c;
+            opt.cost        = buildCost(br, currency);
+
+            // TODO: mapear ao produto correto
+            // MN_BINRange_Benefit__c nao tem lookup direto para Product__c
+            // Caminho provavel: BIN_Range__r.IIN_Number__c -> VG_BankIdentificationNumber__c -> Product_Version__c -> Product__r.Key__c
+            // productMap.get(productKey).optional_benefits.add(opt);
+        }
+
+        return productMap.values();
+    }
+
+    private static Object buildCost(MN_BINRange_Benefit__c br, String currency) {
+        // Coverage_structure__c confirmado em MN_BINRange_Benefit__c
+        // TODO: confirmar valores do picklist de Coverage_structure__c para mapear SIMPLE/USAGE/PERIOD
+        // TODO: confirmar qual campo carrega o valor monetario (Value_limit__c? Value_Limit_Total__c?)
+        SimpleCostResponse c = new SimpleCostResponse();
+        c.coverage_type = br.Coverage_structure__c; // TODO: mapear para 'SIMPLE'/'USAGE'/'PERIOD'
+        // c.price = new AmountResponse(br.Value_limit__c, currency);
+        return c;
+    }
+
+    // ─── Response contract classes ────────────────────────────────────────────
+
+    private class ProductResponse {
+        String product_reference;
+        String name;
+        List<CoreBenefitResponse>     core_benefits;
+        List<OptionalBenefitResponse> optional_benefits;
+    }
+
+    private class CoreBenefitResponse {
+        String benefit_id;
+        String name;
+    }
+
+    private class OptionalBenefitResponse {
+        String benefit_id;
+        String name;
+        String description;
+        Object cost; // SimpleCostResponse | List<UsageCoverageItem> | List<PeriodCoverageItem>
+    }
+
+    private class AmountResponse {
+        Decimal value;
+        String  currency;
+        AmountResponse(Decimal v, String c) { this.value = v; this.currency = c; }
+    }
+
+    private class SimpleCostResponse {
+        String         coverage_type;
+        AmountResponse price;
+    }
+
+    private class UsageCoverageItem {
+        String         coverage_type;
+        Integer        incident_max;
+        Integer        annual_max;
+        AmountResponse price;
+    }
+
+    private class PeriodCoverageItem {
+        String         coverage_type;
+        String         period;
+        AmountResponse price;
+    }
+}
+
+
+    private static final Set<String> SCOPE_READ = new Set<String>{
+        'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.products.read_only'
+    };
+
+    private static final Integer MAX_ITEMS = 100;
+
+    @HttpGet
+    global static void doGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        BenefitsConfigAPIBase_V1.AgentContext context = authorizeAgent(SCOPE_READ);
+        if (context == null) return;
+
+        String productReference = RestContext.request.params.get('product_reference');
+
+        // CORE: MN_Product_Benefit__c WHERE Product__r.Key__c — padrao confirmado em WebportalSalesBinProductBenefits_V1 e BenefitCoreAndOpcional
+        String productFilter = String.isNotBlank(productReference) ? productReference : null;
+
+        List<MN_Product_Benefit__c> coreBenefits = productFilter != null
+            ? [SELECT Product__r.Key__c, Product__r.Name,
+                      Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c
+                      /* Benefit__r.Coverage_Type__c, Benefit__r.Incident_Max__c, Benefit__r.Annual_Max__c, Benefit__r.Coverage_Period__c */ // TODO: confirmar se existem em Benefit__c
+               FROM MN_Product_Benefit__c
+               WHERE Product__r.Key__c = :productFilter
+                 AND Benefit__r.Active__c = true
+                 AND Benefit__r.Visa_External_Reference__c != null
+               WITH USER_MODE
+               LIMIT :MAX_ITEMS]
+            : [SELECT Product__r.Key__c, Product__r.Name,
+                      Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c
+               FROM MN_Product_Benefit__c
+               WHERE Benefit__r.Active__c = true
+                 AND Benefit__r.Visa_External_Reference__c != null
+               WITH USER_MODE
+               LIMIT :MAX_ITEMS];
+
+        // OPTIONAL: MN_BINRange_Benefit__c — padrao confirmado em WebportalSalesBinProductBenefits_V1 e BenefitCoreAndOpcional
+        // Requer BIN digits do banco (BIN_6FirstDigits__c e BIN_10FirstDigitsStdEnc__c)
+        // TODO: buscar BINs do banco via VG_BankIdentificationNumber__c WHERE Bank__c = :context.bankAccountId AND Status__c = 'Approved'
+        //       e iterar para aplicar filtro de range (Min_Bin_Range_Enc__c <= BIN_10 <= Max_Bin_Range_Enc__c)
+        // List<MN_BINRange_Benefit__c> optionalBenefits = [
+        //     SELECT Benefit__r.Visa_External_Reference__c, Benefit__r.Name, Benefit__r.Benefit_Description__c,
+        //            BIN_Range__r.Min_Bin_Range_Enc__c, BIN_Range__r.Max_Bin_Range_Enc__c,
+        //            BIN_Range__r.IIN_Number__c, Remove_Core_Benefit__c
+        //     FROM MN_BINRange_Benefit__c
+        //     WHERE Benefit__r.Active__c = true
+        //       AND Benefit__r.Visa_External_Reference__c != null
+        //     WITH USER_MODE
+        // ];
+
+        // TODO: buscar PricebookEntry pela moeda do banco para optional benefits
+        // Map<Id, PricebookEntry> priceMap = new Map<Id, PricebookEntry>();
+        // for (PricebookEntry pbe : [SELECT UnitPrice, Product2.Benefit__c FROM PricebookEntry
+        //                            WHERE Pricebook2.Name = 'Visa Benefits'
+        //                              AND CurrencyIsoCode = :context.baseCurrency
+        //                              AND IsActive = true WITH USER_MODE]) {
+        //     priceMap.put(pbe.Product2.Benefit__c, pbe);
+        // }
+
+        List<ProductResponse> result = buildResponse(coreBenefits, context.baseCurrency /*, optionalBenefits, priceMap */);
+
+        // TODO: aplicar JWE encrypt via JSONWebEncryption usando Client_Key__c resolvido por context.clientId
+        RestContext.response.statusCode = 200;
+        RestContext.response.responseBody = Blob.valueOf(JSON.serialize(result));
+    }
+
+    // ─── Response builder ────────────────────────────────────────────────────
+
+    private static List<ProductResponse> buildResponse(
+        List<MN_Product_Benefit__c> coreBenefits,
+        String currency
+        /*, List<MN_BINRange_Benefit__c> optionalBenefits, Map<Id, PricebookEntry> priceMap */
+    ) {
+        Map<String, ProductResponse> productMap = new Map<String, ProductResponse>();
+
+        // Core benefits — sempre de MN_Product_Benefit__c
+        for (MN_Product_Benefit__c pb : coreBenefits) {
+            String key = pb.Product__r.Key__c;
+            if (!productMap.containsKey(key)) {
+                ProductResponse pr = new ProductResponse();
+                pr.product_reference = key;
+                pr.name = pb.Product__r.Name;
+                pr.core_benefits = new List<CoreBenefitResponse>();
+                pr.optional_benefits = new List<OptionalBenefitResponse>();
+                productMap.put(key, pr);
+            }
+            CoreBenefitResponse core = new CoreBenefitResponse();
+            core.benefit_id = pb.Benefit__r.Visa_External_Reference__c;
+            core.name = pb.Benefit__r.Name;
+            productMap.get(key).core_benefits.add(core);
+        }
+
+        // Optional benefits — de MN_BINRange_Benefit__c, aplicando filtro de range por BIN do banco
+        // TODO: descomentar quando BINs do banco e PricebookEntry estiverem disponiveis
+        // Set<String> coreRefs = new Set<String>();
+        // for (MN_Product_Benefit__c pb : coreBenefits) coreRefs.add(pb.Benefit__r.Visa_External_Reference__c);
+        // for (MN_BINRange_Benefit__c br : optionalBenefits) {
+        //     // aplicar filtro de range: Min_Bin_Range_Enc__c <= bin10 <= Max_Bin_Range_Enc__c
+        //     if (coreRefs.contains(br.Benefit__r.Visa_External_Reference__c)) continue; // ja e core
+        //     if (br.Remove_Core_Benefit__c) continue;
+        //     PricebookEntry pbe = priceMap.get(br.Benefit__r.Id);
+        //     if (pbe == null) {
+        //         System.debug(LoggingLevel.WARN, 'Optional omitido por ausencia de PricebookEntry: ' + br.Benefit__r.Id);
+        //         continue;
+        //     }
+        //     // TODO: mapear ao produto correto via BIN_Range__r.IIN_Number__c
+        //     OptionalBenefitResponse opt = new OptionalBenefitResponse();
+        //     opt.benefit_id  = br.Benefit__r.Visa_External_Reference__c;
+        //     opt.name        = br.Benefit__r.Name;
+        //     opt.description = br.Benefit__r.Benefit_Description__c;
+        //     opt.cost        = buildCost(br.Benefit__r, pbe);
+        //     // productMap.get(productKey).optional_benefits.add(opt);
+        // }
+
+        return productMap.values();
+    }
+
+    // TODO: implementar quando Coverage_Type__c estiver confirmado em Benefit__c
+    // private static Object buildCost(Benefit__c b, PricebookEntry pbe, String currency) {
+    //     AmountResponse price = new AmountResponse(pbe.UnitPrice, currency);
+    //     if (b.Coverage_Type__c == 'SIMPLE') {
+    //         SimpleCostResponse c = new SimpleCostResponse();
+    //         c.coverage_type = 'SIMPLE';
+    //         c.price = price;
+    //         return c;
+    //     } else if (b.Coverage_Type__c == 'USAGE') {
+    //         UsageCoverageItem item = new UsageCoverageItem();
+    //         item.coverage_type = 'USAGE';
+    //         item.incident_max  = (Integer) b.Incident_Max__c;
+    //         item.annual_max    = (Integer) b.Annual_Max__c;
+    //         item.price         = price;
+    //         return new List<UsageCoverageItem>{ item };
+    //     } else if (b.Coverage_Type__c == 'PERIOD') {
+    //         PeriodCoverageItem item = new PeriodCoverageItem();
+    //         item.coverage_type = 'PERIOD';
+    //         item.period        = b.Coverage_Period__c;
+    //         item.price         = price;
+    //         return new List<PeriodCoverageItem>{ item };
+    //     }
+    //     return null;
+    // }
+
+    // ─── Response contract classes ───────────────────────────────────────────
+
+    private class ProductResponse {
+        String product_reference;
+        String name;
+        List<CoreBenefitResponse> core_benefits;
+        List<OptionalBenefitResponse> optional_benefits;
+    }
+
+    private class CoreBenefitResponse {
+        String benefit_id;
+        String name;
+    }
+
+    private class OptionalBenefitResponse {
+        String benefit_id;
+        String name;
+        String description;
+        Object cost; // SimpleCostResponse | List<UsageCoverageItem> | List<PeriodCoverageItem>
+    }
+
+    private class AmountResponse {
+        Decimal value;
+        String  currency;
+        AmountResponse(Decimal value, String currency) {
+            this.value    = value;
+            this.currency = currency;
+        }
+    }
+
+    private class SimpleCostResponse {
+        String         coverage_type;
+        AmountResponse price;
+    }
+
+    private class UsageCoverageItem {
+        String         coverage_type;
+        Integer        incident_max;
+        Integer        annual_max;
+        AmountResponse price;
+    }
+
+    private class PeriodCoverageItem {
+        String         coverage_type;
+        String         period;
+        AmountResponse price;
+    }
+}
+
+Preciso segui os padrão da org e ajustar esse código
