@@ -22,12 +22,11 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
         List<MN_BINRange_Benefit__c> optionalBenefits =
             fetchOptionalBenefits(context.bankAccountId);
 
-        List<ProductResponse> result =
-            buildResponse(
-                coreBenefits,
-                optionalBenefits,
-                context.baseCurrency
-            );
+        List<ProductResponse> result = buildResponse(
+            coreBenefits,
+            optionalBenefits,
+            context.baseCurrency
+        );
 
         // TODO: aplicar JWE encrypt via JSONWebEncryption
         // usando Client_Key__c resolvido por context.clientId
@@ -38,7 +37,7 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // CORE BENEFITS
+    // 1. CORE BENEFITS
     // ────────────────────────────────────────────────────────────────────────
 
     private static List<MN_Product_Benefit__c> fetchCoreBenefits() {
@@ -59,7 +58,7 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // OPTIONAL BENEFITS
+    // 2. OPTIONAL BENEFITS
     // ────────────────────────────────────────────────────────────────────────
 
     private static List<MN_BINRange_Benefit__c> fetchOptionalBenefits(
@@ -98,14 +97,11 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
                 Benefit__r.Visa_External_Reference__c,
                 Benefit__r.Name,
                 Benefit__r.Benefit_Description__c,
-
                 BIN_Range__r.Product__r.Key__c,
                 BIN_Range__r.Product__r.Name,
-
                 BIN_Range__r.Min_Bin_Range_Enc__c,
                 BIN_Range__r.Max_Bin_Range_Enc__c,
                 BIN_Range__r.IIN_Number__c,
-
                 Remove_Core_Benefit__c,
                 Coverage_structure__c
             FROM MN_BINRange_Benefit__c
@@ -118,8 +114,11 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
         /*
          * O mesmo MN_BINRange_Benefit__c pode casar com mais de um BIN.
          *
-         * Usamos o Id do registro para evitar que a mesma relação
-         * seja processada várias vezes.
+         * Exemplo:
+         * BIN 1234567890 -> registro A
+         * BIN 1234567891 -> registro A
+         *
+         * O Map elimina a duplicidade do próprio registro.
          */
         Map<Id, MN_BINRange_Benefit__c> matchedBenefits =
             new Map<Id, MN_BINRange_Benefit__c>();
@@ -146,7 +145,7 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // RESPONSE
+    // 3. RESPONSE BUILDER
     // ────────────────────────────────────────────────────────────────────────
 
     private static List<ProductResponse> buildResponse(
@@ -158,20 +157,26 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             new Map<String, ProductResponse>();
 
         /*
-         * Guarda os Benefit__c já adicionados ao CORE de cada produto.
+         * Guarda os Benefit__c já adicionados no CORE por produto.
+         *
+         * Exemplo:
+         * I_C_BR -> { BenefitA, BenefitB }
          */
         Map<String, Set<Id>> coreBenefitIdsByProduct =
             new Map<String, Set<Id>>();
 
         /*
-         * Guarda os Benefit__c já adicionados ao OPTIONAL de cada produto.
+         * Guarda os Benefit__c já adicionados no OPTIONAL por produto.
+         *
+         * CORE e OPTIONAL possuem Sets separados porque o mesmo
+         * Benefit pode existir nas duas listas.
          */
         Map<String, Set<Id>> optionalBenefitIdsByProduct =
             new Map<String, Set<Id>>();
 
-        // ================================================================
+        // ────────────────────────────────────────────────────────────────────
         // CORE
-        // ================================================================
+        // ────────────────────────────────────────────────────────────────────
 
         for (MN_Product_Benefit__c pb : coreBenefits) {
             String productKey = pb.Product__r.Key__c;
@@ -180,12 +185,18 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
                 continue;
             }
 
-            ProductResponse product =
-                getOrCreateProduct(
-                    productMap,
-                    productKey,
-                    pb.Product__r.Name
-                );
+            if (!productMap.containsKey(productKey)) {
+                ProductResponse product = new ProductResponse();
+
+                product.product_reference = productKey;
+                product.name = pb.Product__r.Name;
+                product.core_benefits =
+                    new List<CoreBenefitResponse>();
+                product.optional_benefits =
+                    new List<OptionalBenefitResponse>();
+
+                productMap.put(productKey, product);
+            }
 
             if (!coreBenefitIdsByProduct.containsKey(productKey)) {
                 coreBenefitIdsByProduct.put(
@@ -195,8 +206,8 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             }
 
             /*
-             * Evita o mesmo Benefit__c repetido no CORE
-             * do mesmo produto.
+             * Se o Benefit já foi adicionado para esse produto,
+             * não adiciona novamente.
              */
             if (
                 coreBenefitIdsByProduct
@@ -215,22 +226,34 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             core.name =
                 pb.Benefit__r.Name;
 
-            product.core_benefits.add(core);
+            productMap
+                .get(productKey)
+                .core_benefits
+                .add(core);
 
             coreBenefitIdsByProduct
                 .get(productKey)
                 .add(pb.Benefit__c);
         }
 
-        // ================================================================
+        // ────────────────────────────────────────────────────────────────────
         // OPTIONAL
-        // ================================================================
+        // ────────────────────────────────────────────────────────────────────
 
         for (MN_BINRange_Benefit__c br : optionalBenefits) {
+
             if (br.Remove_Core_Benefit__c) {
                 continue;
             }
 
+            /*
+             * O product_reference do OPTIONAL vem do relacionamento:
+             *
+             * MN_BINRange_Benefit__c
+             *   -> BIN_Range__r
+             *      -> Product__r
+             *         -> Key__c
+             */
             String productKey =
                 br.BIN_Range__r.Product__r.Key__c;
 
@@ -239,21 +262,23 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             }
 
             /*
-             * O produto é descoberto pelo relacionamento:
+             * O produto pode ter sido criado pelo CORE ou pelo OPTIONAL.
              *
-             * MN_BINRange_Benefit__c
-             *      -> BIN_Range__r
-             *          -> Product__r
-             *              -> Key__c
-             *
-             * Portanto não precisamos receber a Key no GET.
+             * Portanto, se ainda não existe, criamos aqui.
              */
-            ProductResponse product =
-                getOrCreateProduct(
-                    productMap,
-                    productKey,
-                    br.BIN_Range__r.Product__r.Name
-                );
+            if (!productMap.containsKey(productKey)) {
+                ProductResponse product = new ProductResponse();
+
+                product.product_reference = productKey;
+                product.name =
+                    br.BIN_Range__r.Product__r.Name;
+                product.core_benefits =
+                    new List<CoreBenefitResponse>();
+                product.optional_benefits =
+                    new List<OptionalBenefitResponse>();
+
+                productMap.put(productKey, product);
+            }
 
             if (!optionalBenefitIdsByProduct.containsKey(productKey)) {
                 optionalBenefitIdsByProduct.put(
@@ -263,8 +288,7 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             }
 
             /*
-             * Evita o mesmo Benefit__c repetido no OPTIONAL
-             * do mesmo produto.
+             * Deduplicação por Benefit__c.
              */
             if (
                 optionalBenefitIdsByProduct
@@ -289,7 +313,10 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             optional.cost =
                 buildCost(br, currency);
 
-            product.optional_benefits.add(optional);
+            productMap
+                .get(productKey)
+                .optional_benefits
+                .add(optional);
 
             optionalBenefitIdsByProduct
                 .get(productKey)
@@ -300,33 +327,7 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // PRODUCT FACTORY
-    // ────────────────────────────────────────────────────────────────────────
-
-    private static ProductResponse getOrCreateProduct(
-        Map<String, ProductResponse> productMap,
-        String productKey,
-        String productName
-    ) {
-        if (!productMap.containsKey(productKey)) {
-            ProductResponse product =
-                new ProductResponse();
-
-            product.product_reference = productKey;
-            product.name = productName;
-            product.core_benefits =
-                new List<CoreBenefitResponse>();
-            product.optional_benefits =
-                new List<OptionalBenefitResponse>();
-
-            productMap.put(productKey, product);
-        }
-
-        return productMap.get(productKey);
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // COST
+    // 4. COST
     // ────────────────────────────────────────────────────────────────────────
 
     private static Object buildCost(
@@ -340,19 +341,18 @@ global with sharing class BenefitsConfigAPIProducts_VEXP extends BenefitsConfigA
             br.Coverage_structure__c;
 
         // TODO:
-        // Confirmar campo monetário.
+        // Confirmar o campo que representa o valor monetário.
         //
-        // cost.price =
-        //     new AmountResponse(
-        //         br.Value_limit__c,
-        //         currency
-        //     );
+        // cost.price = new AmountResponse(
+        //     br.Value_limit__c,
+        //     currency
+        // );
 
         return cost;
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // RESPONSE CONTRACT
+    // 5. RESPONSE CONTRACT
     // ────────────────────────────────────────────────────────────────────────
 
     private class ProductResponse {
