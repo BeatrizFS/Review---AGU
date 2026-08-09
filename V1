@@ -1,16 +1,127 @@
-    private static Communication_Subscription__c getCommunicationSubscription(Id contactId, String channel, String relatedTo) {
-        List<Communication_Subscription__c> subscriptions;
-        if (channel == CHANNEL_EMAIL) {
-            subscriptions = [SELECT Id, Channel__c, Related_To__c 
-                FROM Communication_Subscription__c 
-                WHERE Contact__c = :contactId 
-                AND Channel__c = :channel LIMIT 1];
-        } else {
-            subscriptions = [SELECT Id, Channel__c, Related_To__c 
-                FROM Communication_Subscription__c 
-                WHERE Contact__c = :contactId 
-                AND Channel__c = :channel 
-                AND Related_To__c = :relatedTo LIMIT 1];
-        }
-        return subscriptions.isEmpty() ? null : subscriptions[0];
+/*
+GET /banks/{bank_id}
+GET /banks/{bank_id}/agents/{agent_id}
+POST /banks/{bank_id}/agents
+PATCH /banks/{bank_id}/agents/{agent_id}
+*/
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/banks/*')
+global with sharing class BenefitsConfigAPIBanks_VEXP {
+
+    private static final String RESOURCE_PATH = '/banks';
+    private static final String ACTION_AGENTS = 'agents';
+
+    @HttpGet
+    global static void doGet(){
+        handleGet();
     }
+
+    @HttpPost
+    global static void doPost() {
+        handlePost();
+    }
+
+    @HttpPatch
+    global static void doPatch() {
+        handlePatch();
+    }
+
+    private static void handleGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+        if (segments.size() == 1) {
+            handleBankGet(segments[0]);
+        } else if (segments.size() == 3 && segments[1] == ACTION_AGENTS) {
+            handleAgentGet(segments[0], segments[2]);
+        } else {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'Bad Request',
+                'The input information received were not compliant with the endpoint specification.'
+            );
+        }
+    }
+
+    private static void handlePost() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+        if (segments.size() == 2 && segments[1] == ACTION_AGENTS) {
+            handleAgentPost(segments[0]);
+            return;
+        }
+
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'Bad Request',
+            'The input information received were not compliant with the endpoint specification.'
+        );
+    }
+
+    private static void handlePatch() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+        if (segments.size() == 3 && segments[1] == ACTION_AGENTS) {
+            handleAgentPatch(segments[0], segments[2]);
+            return;
+        }
+
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'Bad Request',
+            'The input information received were not compliant with the endpoint specification.'
+        );
+    }
+
+    private static void handleBankGet(String bankId) {
+        // GET /banks/{bank_id}
+    }
+
+    private static void handleAgentGet(String bankId, String agentId) {
+        // GET /banks/{bank_id}/agents/{agent_id}
+    }
+
+    private static void handleAgentPost(String bankId) {
+        // POST /banks/{bank_id}/agents
+    }
+
+    private static void handleAgentPatch(String bankId, String agentId) {
+        // PATCH /banks/{bank_id}/agents/{agent_id}
+    }
+
+    private static List<String> getResourceSegments(String resourcePath) {
+        String requestUri = RestContext.request.requestURI;
+        String path = requestUri.substringAfter(resourcePath + '/');
+
+        if (String.isBlank(path)) {
+            return new List<String>();
+        }
+
+        return path.split('/');
+    }
+
+}
+
+Verifique se essa lógica segue o mesmo principio de 
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class BenefitsConfigAPIPackages_VEXP extends BenefitsConfigAPIBase_V1 {
+
+    private static final String RESOURCE_PATH = '/benefit_packages';
+    private static final String ACTION_CANCEL = 'cancel';
+    private static final String ACTION_COMPLETE = 'complete';
+
+    @HttpPost
+    global static void doPost() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+        if (segments.isEmpty()) {
+            handleCreate();
+        } else if (segments.size() == 2 && segments[1] == ACTION_CANCEL) {
+            handleCancel(segments[0]);
+        } else if (segments.size() == 2 && segments[1] == ACTION_COMPLETE) {
+            handleComplete(segments[0]);
+        } else {
+            writeError(404, 'not_found', 'Unknown resource path');
+        }
+    }
+}
