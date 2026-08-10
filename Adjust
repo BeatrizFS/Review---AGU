@@ -1,95 +1,70 @@
-private static void handleGetDetails(String benefitPackageId) {
-    try {
-        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-            RestContext.request,
-            new Set<String>{
-                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
-                'urn:axa.partners.benefits_platform.read_only'
-            }
-        );
+@HttpGet
+global static void doGet() {
+    RestContext.response.addHeader('Content-Type', 'application/json');
 
-        List<ServiceContract> packages = [
-            SELECT Id,
-                   Package_Status__c,
-                   Product_Reference__c,
-                   StartDate,
-                   EndDate,
-                   Amount_of_Policies__c,
-                   Policy_Range_Start__c,
-                   Policy_Range_End__c,
-                   Legal_Consent_Code__c,
-                   Legal_Consent_Confirmed__c,
-                   Legal_Consent_Date__c
-            FROM ServiceContract
-            WHERE Id = :benefitPackageId
-            LIMIT 1
-        ];
+    List<String> segments = getResourceSegments(RESOURCE_PATH);
 
-        if (packages.isEmpty()) {
-            RestContext.response.statusCode = 404;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    new WebportalApiUtility_v1.ErrorMessage(
-                        '404',
-                        'not_found',
-                        'Benefit package not found.'
-                    )
-                )
-            );
-            return;
-        }
-
-        ServiceContract benefitPackage = packages[0];
-
-        List<ContractLineItem> lineItems = [
-            SELECT Benefit_Category__c,
-                   Benefit__r.Visa_External_Reference__c,
-                   Benefit__r.Name,
-                   Benefit__r.Benefit_Description__c
-            FROM ContractLineItem
-            WHERE ServiceContractId = :benefitPackage.Id
-            ORDER BY CreatedDate ASC
-        ];
-
-        RestContext.response.statusCode = 200;
-        RestContext.response.responseBody = Blob.valueOf(
-            JSON.serializePretty(
-                buildBenefitPackageResponse(
-                    benefitPackage,
-                    lineItems
-                )
-            )
-        );
-    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-        RestContext.response.statusCode = ex.status_code;
+    if (segments.isEmpty()) {
+        handleGet();
+    } else if (segments.size() == 1) {
+        handleGetDetails(segments[0]);
+    } else {
+        RestContext.response.statusCode = 404;
         RestContext.response.responseBody = Blob.valueOf(
             JSON.serializePretty(
                 new WebportalApiUtility_v1.ErrorMessage(
-                    String.valueOf(ex.status_code),
-                    ex.error,
-                    ex.error_description
-                )
-            )
-        );
-    } catch (Exception ex) {
-        System.debug(
-            LoggingLevel.ERROR,
-            'Exception type: ' + ex.getTypeName()
-        );
-        System.debug(
-            LoggingLevel.ERROR,
-            'Exception stack tracing: ' + ex.getStackTraceString()
-        );
-
-        RestContext.response.statusCode = 500;
-        RestContext.response.responseBody = Blob.valueOf(
-            JSON.serializePretty(
-                new WebportalApiUtility_v1.ErrorMessage(
-                    '500',
-                    'internal_server_error',
-                    'Unexpected error retrieving benefit package.'
+                    '404',
+                    'not_found',
+                    'Unknown resource path'
                 )
             )
         );
     }
+}
+
+@HttpPost
+global static void doPost() {
+    RestContext.response.addHeader('Content-Type', 'application/json');
+
+    List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+    if (segments.isEmpty()) {
+        handleCreate();
+    } else if (segments.size() == 2 && segments[1] == ACTION_CANCEL) {
+        handleCancel(segments[0]);
+    } else if (segments.size() == 2 && segments[1] == ACTION_COMPLETE) {
+        handleComplete(segments[0]);
+    } else {
+        writeError(404, 'not_found', 'Unknown resource path');
+    }
+}
+
+private static List<String> getResourceSegments(String resourcePath) {
+    String requestUri = RestContext.request?.requestURI;
+
+    if (String.isBlank(requestUri) || String.isBlank(resourcePath)) {
+        return new List<String>();
+    }
+
+    requestUri = requestUri.split('\\?')[0];
+
+    String suffix = requestUri.substringAfter(resourcePath);
+
+    if (String.isBlank(suffix) || suffix == '/') {
+        return new List<String>();
+    }
+
+    if (!suffix.startsWith('/')) {
+        return new List<String>();
+    }
+
+    List<String> segments = new List<String>();
+
+    for (String segment : suffix.split('/')) {
+        if (String.isNotBlank(segment)) {
+            segments.add(segment);
+        }
+    }
+
+    return segments;
 }
