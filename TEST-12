@@ -1,0 +1,100 @@
+@isTest
+private class Test_WebportalSalesBanks_VEXP {
+
+    private static String token = 
+
+    @testSetup
+    static void setup() {
+
+        Id bankRecordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName().get('Issuer_Bank').getRecordTypeId();
+
+        Account bank = new Account(
+            Name = 'Bank Test',
+            RecordTypeId = bankRecordTypeId,
+            Country__c = 'US',
+            CurrencyIsoCode = 'USD'
+        );
+        insert bank;
+    }
+
+    @isTest
+    static void testSuccess() {
+
+        Account bank = [SELECT Id FROM Account WHERE RecordType.DeveloperName = 'Issuer_Bank' LIMIT 1];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/' + bank.Id;
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanks_VEXP.getBanks();
+        Test.stopTest();
+
+        WebportalSalesBanks_VEXP.BankResponse response =
+            (WebportalSalesBanks_VEXP.BankResponse)
+                JSON.deserialize(
+                    RestContext.response.responseBody.toString(),
+                    WebportalSalesBanks_VEXP.BankResponse.class
+                );
+
+        System.assertEquals(200, RestContext.response.statusCode);
+        System.assertEquals(bank.Id, response.bank_id);
+        System.assertEquals('Bank Test', response.bank_name);
+        System.assertEquals('US', response.country);
+        System.assertEquals('USD', response.base_currency);
+    }
+
+    @isTest
+    static void testFailWithEmptyBankId() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanks_VEXP.getBanks();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @isTest
+    static void testUnauthorized() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/';
+        RestContext.request.httpMethod = 'GET';
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanks_VEXP.getBanks();
+        Test.stopTest();
+
+        System.assertEquals(401, RestContext.response.statusCode);
+    }
+
+
+    @isTest
+    static void testFailWithBankNotFound() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/banks/001000000000000AAA';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebportalSalesBanks_VEXP.getBanks();
+        Test.stopTest();
+
+        System.assertEquals(404, RestContext.response.statusCode);
+    }
+}
