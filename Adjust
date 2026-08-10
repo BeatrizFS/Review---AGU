@@ -1,302 +1,189 @@
-private static Map<String, PricebookEntry>
-getOrCreatePricebookEntriesByBenefitReference(
-    Map<String, Benefit__c> benefitsByReference,
-    Id pricebookId,
-    String currencyIsoCode
-) {
-    Set<Id> benefitIds = new Set<Id>();
-
-    for (Benefit__c benefit : benefitsByReference.values()) {
-        benefitIds.add(benefit.Id);
-    }
-
-    /*
-     * ============================================================
-     * 1. Get Product2 associated with each Benefit__c
-     * ============================================================
-     */
-    List<Product2> products = [
-        SELECT
-            Id,
-            Name,
-            Benefit__c,
-            Family,
-            IsActive,
-            CurrencyIsoCode
-        FROM Product2
-        WHERE Benefit__c IN :benefitIds
-          AND Family = 'Benefit'
-          AND IsActive = true
-    ];
-
-    Map<Id, Product2> productsByBenefitId =
-        new Map<Id, Product2>();
-
-    for (Product2 product : products) {
-
-        if (productsByBenefitId.containsKey(product.Benefit__c)) {
-            throw new WebportalApiUtility_v1.RequestAPIException(
-                400,
-                'bad_request',
-                'More than one active Product2 was found for Benefit ' +
-                String.valueOf(product.Benefit__c)
-            );
+{
+    "status": "Draft",
+    "product_reference": "I_C_BR",
+    "optional_benefits": [
+        {
+            "name": "Cellphone Protection",
+            "description": null,
+            "benefit_id": "LACCELPRO"
         }
-
-        productsByBenefitId.put(
-            product.Benefit__c,
-            product
-        );
-    }
-
-    /*
-     * ============================================================
-     * 2. Validate Product2 exists for every Benefit
-     * ============================================================
-     */
-    for (String benefitReference : benefitsByReference.keySet()) {
-
-        Benefit__c benefit =
-            benefitsByReference.get(benefitReference);
-
-        if (!productsByBenefitId.containsKey(benefit.Id)) {
-
-            throw new WebportalApiUtility_v1.RequestAPIException(
-                400,
-                'bad_request',
-                'Product2 for benefit ' +
-                benefitReference +
-                ' was not found in the catalogue.'
-            );
+    ],
+    "legal_consents": [
+        {
+            "is_confirmed": true,
+            "consented_at": "2019-03-22T10:59:00Z",
+            "code": "legal_consent_I_understand"
         }
-    }
-
-    Set<Id> productIds = new Set<Id>();
-
-    for (Product2 product : productsByBenefitId.values()) {
-        productIds.add(product.Id);
-    }
-
-
-    /*
-     * ============================================================
-     * 3. Get Standard Price Book
-     * ============================================================
-     */
-    Id standardPricebookId;
-
-    if (Test.isRunningTest()) {
-        standardPricebookId = Test.getStandardPricebookId();
-    } else {
-        standardPricebookId = [
-            SELECT Id
-            FROM Pricebook2
-            WHERE IsStandard = true
-            LIMIT 1
-        ].Id;
-    }
-
-
-    /*
-     * ============================================================
-     * 4. Find existing Standard PricebookEntries
-     * ============================================================
-     */
-    Map<Id, PricebookEntry> standardEntriesByProduct =
-        new Map<Id, PricebookEntry>();
-
-    for (PricebookEntry entry : [
-        SELECT
-            Id,
-            Product2Id,
-            UnitPrice,
-            IsActive,
-            CurrencyIsoCode
-        FROM PricebookEntry
-        WHERE Pricebook2Id = :standardPricebookId
-          AND Product2Id IN :productIds
-          AND CurrencyIsoCode = :currencyIsoCode
-    ]) {
-        standardEntriesByProduct.put(
-            entry.Product2Id,
-            entry
-        );
-    }
-
-
-    /*
-     * ============================================================
-     * 5. Create missing Standard PricebookEntries
-     * ============================================================
-     *
-     * This MUST happen before creating entries in Visa Benefits.
-     */
-    List<PricebookEntry> standardEntriesToInsert =
-        new List<PricebookEntry>();
-
-    for (Product2 product : productsByBenefitId.values()) {
-
-        if (!standardEntriesByProduct.containsKey(product.Id)) {
-
-            PricebookEntry standardEntry =
-                new PricebookEntry();
-
-            standardEntry.Pricebook2Id =
-                standardPricebookId;
-
-            standardEntry.Product2Id =
-                product.Id;
-
-            /*
-             * TODO:
-             * Replace 100 with the real benefit price.
-             */
-            standardEntry.UnitPrice =
-                100;
-
-            standardEntry.IsActive =
-                true;
-
-            standardEntry.CurrencyIsoCode =
-                currencyIsoCode;
-
-            standardEntriesToInsert.add(
-                standardEntry
-            );
+    ],
+    "core_benefits": [
+        {
+            "name": "(EMC) Emergency Medical Assistance",
+            "benefit_id": "LACIEMS"
         }
-    }
-
-    if (!standardEntriesToInsert.isEmpty()) {
-        insert standardEntriesToInsert;
-
-        for (PricebookEntry entry : standardEntriesToInsert) {
-            standardEntriesByProduct.put(
-                entry.Product2Id,
-                entry
-            );
-        }
-    }
-
-
-    /*
-     * ============================================================
-     * 6. Find existing Visa Benefits PricebookEntries
-     * ============================================================
-     */
-    Map<Id, PricebookEntry> visaEntriesByProduct =
-        new Map<Id, PricebookEntry>();
-
-    for (PricebookEntry entry : [
-        SELECT
-            Id,
-            Product2Id,
-            Pricebook2Id,
-            UnitPrice,
-            IsActive,
-            CurrencyIsoCode
-        FROM PricebookEntry
-        WHERE Pricebook2Id = :pricebookId
-          AND Product2Id IN :productIds
-          AND CurrencyIsoCode = :currencyIsoCode
-    ]) {
-        visaEntriesByProduct.put(
-            entry.Product2Id,
-            entry
-        );
-    }
-
-
-    /*
-     * ============================================================
-     * 7. Create missing Visa Benefits PricebookEntries
-     * ============================================================
-     */
-    List<PricebookEntry> visaEntriesToInsert =
-        new List<PricebookEntry>();
-
-    for (Product2 product : productsByBenefitId.values()) {
-
-        if (!visaEntriesByProduct.containsKey(product.Id)) {
-
-            /*
-             * Get the standard price.
-             */
-            PricebookEntry standardEntry =
-                standardEntriesByProduct.get(product.Id);
-
-            PricebookEntry visaEntry =
-                new PricebookEntry();
-
-            visaEntry.Pricebook2Id =
-                pricebookId;
-
-            visaEntry.Product2Id =
-                product.Id;
-
-            visaEntry.UnitPrice =
-                standardEntry.UnitPrice;
-
-            visaEntry.IsActive =
-                true;
-
-            visaEntry.CurrencyIsoCode =
-                currencyIsoCode;
-
-            visaEntriesToInsert.add(
-                visaEntry
-            );
-        }
-    }
-
-    if (!visaEntriesToInsert.isEmpty()) {
-        insert visaEntriesToInsert;
-
-        for (PricebookEntry entry : visaEntriesToInsert) {
-            visaEntriesByProduct.put(
-                entry.Product2Id,
-                entry
-            );
-        }
-    }
-
-
-    /*
-     * ============================================================
-     * 8. Return:
-     *
-     * Benefit External Reference → Visa PricebookEntry
-     * ============================================================
-     */
-    Map<String, PricebookEntry> result =
-        new Map<String, PricebookEntry>();
-
-    for (String benefitReference : benefitsByReference.keySet()) {
-
-        Benefit__c benefit =
-            benefitsByReference.get(benefitReference);
-
-        Product2 product =
-            productsByBenefitId.get(benefit.Id);
-
-        PricebookEntry visaEntry =
-            visaEntriesByProduct.get(product.Id);
-
-        if (visaEntry == null || !visaEntry.IsActive) {
-
-            throw new WebportalApiUtility_v1.RequestAPIException(
-                400,
-                'bad_request',
-                'Benefit ' +
-                benefitReference +
-                ' is not available in the Visa Benefits Pricebook.'
-            );
-        }
-
-        result.put(
-            benefitReference,
-            visaEntry
-        );
-    }
-
-    return result;
+    ],
+    "benefit_package_id": "810bY00000aWdfoQAC",
+    "amount_of_policies": 12500,
+    "affected_policy_range": {
+        "external_number_start_at": "1234569890",
+        "external_number_end_at": "1234569890"
+    },
+    "active_start_at": "2028-05-22",
+    "active_end_at": "2029-05-22"
 }
+
+esse é o retorno do get, porém na doc o padrão seria 
+
+{
+  "status": "ACTIVE",
+  "benefit_package_id": "b09aac28-7f63",
+  "product_reference": "I_C_BR",
+  "active_start_at": "2028-05-22",
+  "active_end_at": "2029-05-22",
+  "amount_of_policies": 12500,
+  "affected_policy_range": {
+    "external_number_start_at": "1234569890",
+    "external_number_end_at": "1234569890"
+  },
+  "core_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "optional_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services",
+      "description": "The International Emergency Medical Service will provide you with medical and hospital coverage, as well as dental coverage. The service is valid for international trips of up to 60 consecutive days from the date of departure from your country of residence."
+    }
+  ],
+  "legal_consents": [
+    {
+      "code": "legal_consent_I_understand",
+      "is_confirmed": true,
+      "consented_at": "2019-03-22T10:59:00Z"
+    }
+  ]
+}
+
+O que estou usando:
+    //=========================
+    private static BenefitPackage buildBenefitPackageResponse(ServiceContract contract, List<ContractLineItem> lineItems) {
+        BenefitPackage response = new BenefitPackage();
+        response.status = contract.Package_Status__c;
+        response.benefit_package_id = contract.Id;
+        response.product_reference = contract.Product_Reference__c;
+        response.active_start_at = contract.StartDate;
+        response.active_end_at = contract.EndDate;
+        response.amount_of_policies = contract.Amount_of_Policies__c == null ? null : Integer.valueOf(contract.Amount_of_Policies__c);
+        response.affected_policy_range = new AffectedPolicyRange();
+        response.affected_policy_range.external_number_start_at = contract.Policy_Range_Start__c;
+        response.affected_policy_range.external_number_end_at = contract.Policy_Range_End__c;
+        response.core_benefits = new List<CoreBenefit>();
+        response.optional_benefits = new List<OptionalBenefit>();
+        response.legal_consents = buildLegalConsentResponse(contract);
+
+        for (ContractLineItem lineItem : lineItems) {
+            if (lineItem.Benefit_Category__c == 'Core') {
+                CoreBenefit coreBenefit = new CoreBenefit();
+                coreBenefit.benefit_id = lineItem.Benefit__r.Visa_External_Reference__c;
+                coreBenefit.name = lineItem.Benefit__r.Name;
+                response.core_benefits.add(coreBenefit);
+            } else if (lineItem.Benefit_Category__c == 'Optional') {
+                OptionalBenefit optionalBenefit = new OptionalBenefit();
+                optionalBenefit.benefit_id = lineItem.Benefit__r.Visa_External_Reference__c;
+                optionalBenefit.name = lineItem.Benefit__r.Name;
+                optionalBenefit.description = lineItem.Benefit__r.Benefit_Description__c;
+                response.optional_benefits.add(optionalBenefit);
+            }
+        }
+
+        return response;
+    }
+
+    private static List<LegalConsentItem> buildLegalConsentResponse(ServiceContract contract) {
+        List<LegalConsentItem> legalConsents = new List<LegalConsentItem>();
+        if (String.isBlank(contract.Legal_Consent_Code__c)) {
+            return legalConsents;
+        }
+
+        LegalConsentItem consent = new LegalConsentItem();
+        consent.code = contract.Legal_Consent_Code__c;
+        consent.is_confirmed = contract.Legal_Consent_Confirmed__c;
+        consent.consented_at = contract.Legal_Consent_Date__c == null ? null : contract.Legal_Consent_Date__c.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'');
+        legalConsents.add(consent);
+        return legalConsents;
+    }
+
+----------
+    private static void handleGetDetails(String benefitPackageId) {
+        try {
+            RestContext.response.addHeader('Content-Type', 'application/json');
+
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                    'urn:axa.partners.benefits_platform.read_only'
+                }
+            );
+
+            List<ServiceContract> packages = [
+                SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate,
+                       Amount_of_Policies__c, Policy_Range_Start__c, Policy_Range_End__c,
+                       Legal_Consent_Code__c, Legal_Consent_Confirmed__c, Legal_Consent_Date__c
+                FROM ServiceContract
+                WHERE Id = :benefitPackageId
+                LIMIT 1
+            ];
+
+            if (packages.isEmpty()) {
+                RestContext.response.statusCode = 404;
+                RestContext.response.responseBody = Blob.valueOf(
+                    JSON.serializePretty(
+                        new WebportalApiUtility_v1.ErrorMessage('404', 'not_found', 'Benefit package not found.')
+                    )
+                );
+                return;
+            }
+            //NOT FOUND error message should be reviewed to match the API documentation
+            //ADD VALIDATIONS - SERVICE CONTRACT and CONTRACT LINE ITEM
+
+            List<ContractLineItem> lineItems = [
+                SELECT Benefit_Category__c,
+                       Benefit__r.Visa_External_Reference__c,
+                       Benefit__r.Name,
+                       Benefit__r.Benefit_Description__c
+                FROM ContractLineItem
+                WHERE ServiceContractId = :packages[0].Id
+                ORDER BY CreatedDate ASC
+            ];
+
+            RestContext.response.statusCode = 200;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageResponse(packages[0], lineItems)));
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error,
+                        ex.error_description
+                    )
+                )
+            );
+        } catch(Exception ex) {
+            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
+            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        '500',
+                        'Internal Server Error',
+                        'Unexpected error retrieving benefit packages: ' + ex.getMessage()
+                    )
+                )
+            );
+        }
+    }
