@@ -1,0 +1,61 @@
+-> A constatação mais significativa: o *SimplifiedBenefitPackage* — o esquema retornado pela chamada `GET /benefit_packages` — não inclui quatro das nove colunas exibidas na tela de listagem. A tela principal do produto não pode ser construída a partir do seu próprio contrato.
+
+-> A lista exibe nove colunas: ID, Nome do pacote de benefícios, Produto, BIN, Contas estimadas, Categoria, Data de início, Válido até, Status. O `SimplifiedBenefitPackage` contém seis atributos: `benefit_package_id`, `product_reference`, `active_start_at`, `active_end_at`, `amount_of_policies`, `status`.
+
+-> POST | GET
+NAME - Atríbuto necessário
+
+-> GET / BENEFIT PACKAGE
+PRODUCT NAME
+
+-> 
+
+FIELDS - BENEFIT PACKAGE
+- NAME (Package Name)
+Absent from BenefitPackage, SimplifiedBenefitPackage and BenefitPackagePostResponse
+- PRODUCT NAME
+- CATEGORY
+- ID - Benefit Package Id? O campo está truncado?
+- BIN
+
+-> Pricebook
+
+### 4. Catalogue bridge: one `Product2` per `Benefit__c`, in a dedicated product family
+
+`Product2` is **already in production in this org** as the card-product catalogue. It is queried by
+`WebportalSalesProducts_V1` and `WebportalSalesProductDetails_V1` with `Key__c`,
+`Card_Platform_Code__c`, `Card_Product_Id__c`, `Card_Product_Name__c`, `Card_Type_Code__c`,
+`Card_Subtype_Code__c`, `Country_Code__c` and `Order__c`, and it carries the child relationship
+`MN_Product_Countries__r`. The bridge therefore does not populate an empty object — it **adds a
+second population** to a live one, and the two must not be confusable.
+
+`ContractLineItem.PricebookEntryId` is mandatory, so a commercial representation of each benefit is
+unavoidable. Rather than migrating the benefit catalogue, a thin bridge is built:
+
+- One `Product2` per `Benefit__c`, related by **Benefit (`Benefit__c`)**, a lookup on `Product2`, and
+  keyed by **Benefit External Id (`Benefit_External_Id__c`)**, a unique External Id text field
+  carrying the `Benefit__c` record Id. The External Id makes the sync idempotent through `upsert`.
+- **`Family = 'Benefit'`** on every row the bridge creates. This is what separates benefit products
+  from the existing card products, which the Sales APIs select by `Key__c`. Every query in this
+  solution filters on the family, and every query of the existing APIs remains untouched because
+  benefit rows carry no `Key__c`.
+- `Product2.Name` and `Product2.Description` are copied from the catalogue at sync time; the API
+  always serialises from `Benefit__c`, so a stale copy on `Product2` cannot leak into a response.
+- A **Visa Benefits** custom `Pricebook2` holds the per-card prices. A `PricebookEntry` in a custom
+  price book requires an active entry for the same product in the **Standard Price Book** first; the
+  sync creates both, the standard entry at the same `UnitPrice`.
+- One `PricebookEntry` per product per activated currency (decision 7).
+- The sync runs from the record-triggered Flow **`Benefit_Sync_Product2`** on `Benefit__c` for
+  incremental changes, and from `Benefit2ProductSyncBatch` for backfill and reconciliation. The Flow
+  is the incremental path because `Benefit__c` carries no Apex trigger and no record-triggered flow
+  today; had one existed, the sync would extend it instead of adding a second automation to the same
+  object and moment. Both paths converge on the same upsert semantics keyed by
+  `Benefit_External_Id__c`, so a record repaired by the batch is indistinguishable from one created
+  by the Flow.
+
+The bridge is deliberately one-directional: `Benefit__c` is the source, `Product2` is the
+projection. Nothing writes back to the catalogue, and nothing in the bridge touches a card-product
+row.
+
+
+Monte perguntas sobre essa
