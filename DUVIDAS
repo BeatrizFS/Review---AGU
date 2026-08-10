@@ -1,0 +1,33 @@
+    private static final Map<String, String> API_TO_PLATFORM_STATUS = new Map<String, String>{
+        'DRAFT' => 'Draft',
+        'AWAITING_START' => 'Awaiting Start',
+        'ACTIVE' => 'Active',
+        'CANCELLED' => 'Cancelled',
+        'EXPIRED' => 'Expired',
+        'AWAITING_AGENT_SIGNATURE' => 'Awaiting Agent Signature'
+    };
+
+    private static final Map<String, String> PLATFORM_TO_API_STATUS = new Map<String, String>{
+        'Draft' => 'DRAFT',
+        'Awaiting Start' => 'AWAITING_START',
+        'Active' => 'ACTIVE',
+        'Cancelled' => 'CANCELLED',
+        'Expired' => 'EXPIRED',
+        'Awaiting Agent Signature' => 'AWAITING_AGENT_SIGNATURE'
+    };
+
+A diferença é a direção da conversão entre os status da API e os status persistidos no Salesforce, definidos em BenefitsConfigAPIPackages_VEXP.cls:29.
+
+API_TO_PLATFORM_STATUS converte do contrato externo para o valor interno do org. Exemplo: quando chega DRAFT no payload ou quando você quer gravar um pacote novo, ele vira Draft em Package_Status__c.
+
+PLATFORM_TO_API_STATUS faz o caminho inverso: pega o valor salvo no Salesforce e transforma no enum esperado pelo contrato. Exemplo: ao ler Package_Status__c = 'Draft' no ServiceContract, a resposta da API sai como DRAFT.
+
+Em resumo:
+
+API_TO_PLATFORM_STATUS: entrada da API -> banco/Salesforce
+PLATFORM_TO_API_STATUS: banco/Salesforce -> saída da API
+No seu arquivo isso aparece assim:
+
+Na criação, contract.Package_Status__c = API_TO_PLATFORM_STATUS.get('DRAFT')
+Na resposta, item.status = toApiStatus(contract.Package_Status__c) usando PLATFORM_TO_API_STATUS
+Se quiser, eu posso renomear essas constantes para algo mais explícito, como API_STATUS_TO_SF_STATUS e SF_STATUS_TO_API_STATUS.
