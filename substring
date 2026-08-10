@@ -1,0 +1,58 @@
+/**
+ * Extracts path segments that follow the given resource path from the
+ * current REST request URI.
+ *
+ * Query parameters and empty path segments are ignored. The resource path
+ * must be followed by '/' or the end of the URI to avoid prefix matches.
+ *
+ * Examples:
+ *   .../benefit_packages/a1B2x/cancel?foo=bar -> ['a1B2x', 'cancel']
+ *   .../benefit_packages                     -> []
+ *   .../benefit_packages/                    -> []
+ *   .../benefit_packages_v2                  -> []
+ *
+ * @param resourcePath Base resource path, e.g. '/benefit_packages'
+ * @return Non-empty path segments following the resource path
+ */
+protected static List<String> getResourceSegments(String resourcePath) {
+    String requestUri = RestContext.request?.requestURI;
+
+    if (String.isBlank(requestUri) || String.isBlank(resourcePath)) {
+        return new List<String>();
+    }
+
+    Integer queryIndex = requestUri.indexOf('?');
+
+    if (queryIndex >= 0) {
+        requestUri = requestUri.substring(0, queryIndex);
+    }
+
+    Integer resourceIndex = requestUri.indexOf(resourcePath);
+
+    if (resourceIndex < 0) {
+        return new List<String>();
+    }
+
+    Integer suffixStart = resourceIndex + resourcePath.length();
+
+    if (suffixStart < requestUri.length()
+        && requestUri.substring(suffixStart, suffixStart + 1) != '/') {
+        return new List<String>();
+    }
+
+    String suffix = requestUri.substring(suffixStart);
+
+    if (String.isBlank(suffix) || suffix == '/') {
+        return new List<String>();
+    }
+
+    List<String> segments = new List<String>();
+
+    for (String segment : suffix.split('/')) {
+        if (String.isNotBlank(segment)) {
+            segments.add(segment);
+        }
+    }
+
+    return segments;
+}
