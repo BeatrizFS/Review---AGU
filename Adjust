@@ -1,69 +1,95 @@
-    private static void handleGetDetails(String benefitPackageId) {
-        try {
-            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-                RestContext.request,
-                new Set<String>{
-                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
-                    'urn:axa.partners.benefits_platform.read_only'
-                }
-            );
-
-            List<ServiceContract> packages = [
-                SELECT Id, Package_Status__c, Product_Reference__c, StartDate, EndDate,
-                       Amount_of_Policies__c, Policy_Range_Start__c, Policy_Range_End__c,
-                       Legal_Consent_Code__c, Legal_Consent_Confirmed__c, Legal_Consent_Date__c
-                FROM ServiceContract
-                WHERE Id = :benefitPackageId
-                LIMIT 1
-            ];
-
-            if (packages.isEmpty()) {
-                RestContext.response.statusCode = 404;
-                RestContext.response.responseBody = Blob.valueOf(
-                    JSON.serializePretty(
-                        new WebportalApiUtility_v1.ErrorMessage('404', 'not_found', 'Benefit package not found.')
-                    )
-                );
-                return;
+private static void handleGetDetails(String benefitPackageId) {
+    try {
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                'urn:axa.partners.benefits_platform.read_only'
             }
-            //NOT FOUND error message should be reviewed to match the API documentation
-            //ADD VALIDATIONS - SERVICE CONTRACT and CONTRACT LINE ITEM
+        );
 
-            List<ContractLineItem> lineItems = [
-                SELECT Benefit_Category__c,
-                       Benefit__r.Visa_External_Reference__c,
-                       Benefit__r.Name,
-                       Benefit__r.Benefit_Description__c
-                FROM ContractLineItem
-                WHERE ServiceContractId = :packages[0].Id
-                ORDER BY CreatedDate ASC
-            ];
+        List<ServiceContract> packages = [
+            SELECT Id,
+                   Package_Status__c,
+                   Product_Reference__c,
+                   StartDate,
+                   EndDate,
+                   Amount_of_Policies__c,
+                   Policy_Range_Start__c,
+                   Policy_Range_End__c,
+                   Legal_Consent_Code__c,
+                   Legal_Consent_Confirmed__c,
+                   Legal_Consent_Date__c
+            FROM ServiceContract
+            WHERE Id = :benefitPackageId
+            LIMIT 1
+        ];
 
-            RestContext.response.statusCode = 200;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(buildBenefitPackageResponse(packages[0], lineItems)));
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statusCode = ex.status_code;
+        if (packages.isEmpty()) {
+            RestContext.response.statusCode = 404;
             RestContext.response.responseBody = Blob.valueOf(
                 JSON.serializePretty(
                     new WebportalApiUtility_v1.ErrorMessage(
-                        String.valueOf(ex.status_code),
-                        ex.error,
-                        ex.error_description
+                        '404',
+                        'not_found',
+                        'Benefit package not found.'
                     )
                 )
             );
-        } catch(Exception ex) {
-            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
-            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
-            RestContext.response.statusCode = 500;
-            RestContext.response.responseBody = Blob.valueOf(
-                JSON.serializePretty(
-                    new WebportalApiUtility_v1.ErrorMessage(
-                        '500',
-                        'Internal Server Error',
-                        'Unexpected error retrieving benefit packages: ' + ex.getMessage()
-                    )
-                )
-            );
+            return;
         }
+
+        ServiceContract benefitPackage = packages[0];
+
+        List<ContractLineItem> lineItems = [
+            SELECT Benefit_Category__c,
+                   Benefit__r.Visa_External_Reference__c,
+                   Benefit__r.Name,
+                   Benefit__r.Benefit_Description__c
+            FROM ContractLineItem
+            WHERE ServiceContractId = :benefitPackage.Id
+            ORDER BY CreatedDate ASC
+        ];
+
+        RestContext.response.statusCode = 200;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                buildBenefitPackageResponse(
+                    benefitPackage,
+                    lineItems
+                )
+            )
+        );
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+        RestContext.response.statusCode = ex.status_code;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    String.valueOf(ex.status_code),
+                    ex.error,
+                    ex.error_description
+                )
+            )
+        );
+    } catch (Exception ex) {
+        System.debug(
+            LoggingLevel.ERROR,
+            'Exception type: ' + ex.getTypeName()
+        );
+        System.debug(
+            LoggingLevel.ERROR,
+            'Exception stack tracing: ' + ex.getStackTraceString()
+        );
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'internal_server_error',
+                    'Unexpected error retrieving benefit package.'
+                )
+            )
+        );
     }
+}
