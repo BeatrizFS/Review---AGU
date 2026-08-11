@@ -1,0 +1,1018 @@
+@IsTest
+private class Test_BenefitsConfigAPIPackages_VEXP {
+
+    private static final String TOKEN = 'test-token';
+    private static final String PRICEBOOK_NAME = 'Visa Benefits';
+    private static final String PRODUCT_REFERENCE = 'I_C_BR';
+    private static final String CORE_BENEFIT_REFERENCE = 'CORE-001';
+    private static final String OPTIONAL_BENEFIT_REFERENCE = 'OPT-001';
+
+    @TestSetup
+    static void setup() {
+
+        // Pricebook utilizado pelo endpoint para criar os ContractLineItems.
+        Pricebook2 benefitsPricebook = new Pricebook2(
+            Name = PRICEBOOK_NAME,
+            IsActive = true
+        );
+        insert benefitsPricebook;
+
+        // Benefits utilizados no request.
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = 'Core Benefit',
+            Visa_External_Reference__c = CORE_BENEFIT_REFERENCE,
+            Benefit_Description__c = 'Core benefit description'
+        );
+
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Optional Benefit',
+            Visa_External_Reference__c = OPTIONAL_BENEFIT_REFERENCE,
+            Benefit_Description__c = 'Optional benefit description'
+        );
+
+        insert new List<Benefit__c>{
+            coreBenefit,
+            optionalBenefit
+        };
+
+        // Product utilizado para resolver product_reference.
+        Product__c product = new Product__c(
+            Name = 'Test Product',
+            Key__c = PRODUCT_REFERENCE
+        );
+        insert product;
+
+        // Product2 utilizado pelo catálogo de benefícios.
+        Product2 coreProduct = new Product2(
+            Name = 'Core Benefit Product',
+            ProductCode = 'CORE-PRODUCT',
+            Family = 'Benefit',
+            IsActive = true,
+            Benefit__c = coreBenefit.Id
+        );
+
+        Product2 optionalProduct = new Product2(
+            Name = 'Optional Benefit Product',
+            ProductCode = 'OPTIONAL-PRODUCT',
+            Family = 'Benefit',
+            IsActive = true,
+            Benefit__c = optionalBenefit.Id
+        );
+
+        insert new List<Product2>{
+            coreProduct,
+            optionalProduct
+        };
+
+        // Pricebook Entries necessários para os benefícios.
+        insert new List<PricebookEntry>{
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = coreProduct.Id,
+                UnitPrice = 0,
+                IsActive = true,
+                CurrencyIsoCode = 'USD'
+            ),
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = optionalProduct.Id,
+                UnitPrice = 50,
+                IsActive = true,
+                CurrencyIsoCode = 'USD'
+            )
+        };
+    }
+
+    // Cobre a criação completa de um Benefit Package com Core, Optional,
+    // affected policy range e legal consent.
+    @IsTest
+    static void testSuccessCreateBenefitPackage() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put(
+            'authorization2',
+            'Bearer ' + TOKEN
+        );
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"affected_policy_range":{' +
+                    '"external_number_start_at":"1000",' +
+                    '"external_number_end_at":"1100"' +
+                '},' +
+                '"core_benefits":[' +
+                    '{' +
+                        '"benefit_id":"CORE-001"' +
+                    '}' +
+                '],' +
+                '"optional_benefits":[' +
+                    '{' +
+                        '"benefit_id":"OPT-001"' +
+                    '}' +
+                '],' +
+                '"legal_consents":[' +
+                    '{' +
+                        '"code":"legal_consent_I_understand",' +
+                        '"is_confirmed":true,' +
+                        '"consented_at":"2026-08-11T10:30:45Z"' +
+                    '}' +
+                ']' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(
+            201,
+            RestContext.response.statusCode,
+            'Expected HTTP 201 when the benefit package is created.'
+        );
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+
+        System.assertNotEquals(
+            null,
+            response.benefit_package_id,
+            'The response should contain the created benefit package id.'
+        );
+
+        ServiceContract contract = [
+            SELECT Id,
+                   Package_Status__c,
+                   Product_Reference__c,
+                   Product__c,
+                   StartDate,
+                   EndDate,
+                   Term,
+                   Amount_of_Policies__c,
+                   Policy_Range_Start__c,
+                   Policy_Range_End__c,
+                   Legal_Consent_Code__c,
+                   Legal_Consent_Confirmed__c,
+                   Legal_Consent_Date__c,
+                   Pricebook2Id
+            FROM ServiceContract
+            WHERE Id = :response.benefit_package_id
+            LIMIT 1
+        ];
+
+        System.assertEquals(
+            'Draft',
+            contract.Package_Status__c,
+            'The created package should have Draft status.'
+        );
+
+        System.assertEquals(
+            PRODUCT_REFERENCE,
+            contract.Product_Reference__c,
+            'The product reference should be persisted.'
+        );
+
+        System.assertNotEquals(
+            null,
+            contract.Product__c,
+            'The product should be associated with the package.'
+        );
+
+        System.assertEquals(
+            Date.newInstance(2026, 9, 1),
+            contract.StartDate,
+            'The start date should be persisted.'
+        );
+
+        System.assertEquals(
+            Date.newInstance(2027, 9, 1),
+            contract.EndDate,
+            'The end date should be persisted.'
+        );
+
+        System.assertEquals(
+            12,
+            contract.Term,
+            'The contract term should contain the number of whole months.'
+        );
+
+        System.assertEquals(
+            100,
+            Integer.valueOf(contract.Amount_of_Policies__c),
+            'The amount of policies should be persisted.'
+        );
+
+        System.assertEquals(
+            '1000',
+            contract.Policy_Range_Start__c,
+            'The policy range start should be persisted.'
+        );
+
+        System.assertEquals(
+            '1100',
+            contract.Policy_Range_End__c,
+            'The policy range end should be persisted.'
+        );
+
+        System.assertEquals(
+            'legal_consent_I_understand',
+            contract.Legal_Consent_Code__c,
+            'The legal consent code should be persisted.'
+        );
+
+        System.assertEquals(
+            true,
+            contract.Legal_Consent_Confirmed__c,
+            'The legal consent confirmation should be persisted.'
+        );
+
+        System.assertNotEquals(
+            null,
+            contract.Legal_Consent_Date__c,
+            'The legal consent date should be persisted.'
+        );
+
+        System.assertNotEquals(
+            null,
+            contract.Pricebook2Id,
+            'The package should use the Benefits Pricebook.'
+        );
+
+        List<ContractLineItem> lineItems = [
+            SELECT Id,
+                   Benefit__c,
+                   Benefit_Category__c,
+                   Quantity,
+                   UnitPrice,
+                   StartDate,
+                   EndDate
+            FROM ContractLineItem
+            WHERE ServiceContractId = :contract.Id
+            ORDER BY Benefit_Category__c ASC
+        ];
+
+        System.assertEquals(
+            2,
+            lineItems.size(),
+            'The package should contain one Core and one Optional benefit.'
+        );
+
+        ContractLineItem coreLineItem;
+        ContractLineItem optionalLineItem;
+
+        for (ContractLineItem lineItem : lineItems) {
+            if (lineItem.Benefit_Category__c == 'Core') {
+                coreLineItem = lineItem;
+            } else if (lineItem.Benefit_Category__c == 'Optional') {
+                optionalLineItem = lineItem;
+            }
+        }
+
+        System.assertNotEquals(
+            null,
+            coreLineItem,
+            'The Core benefit should be created.'
+        );
+
+        System.assertEquals(
+            0,
+            coreLineItem.UnitPrice,
+            'Core benefits should have zero price.'
+        );
+
+        System.assertEquals(
+            100,
+            Integer.valueOf(coreLineItem.Quantity),
+            'The Core benefit quantity should match amount_of_policies.'
+        );
+
+        System.assertNotEquals(
+            null,
+            optionalLineItem,
+            'The Optional benefit should be created.'
+        );
+
+        System.assertEquals(
+            50,
+            optionalLineItem.UnitPrice,
+            'Optional benefits should use the PricebookEntry price.'
+        );
+
+        System.assertEquals(
+            100,
+            Integer.valueOf(optionalLineItem.Quantity),
+            'The Optional benefit quantity should match amount_of_policies.'
+        );
+    }
+
+    // Cobre a criação sem optional_benefits, que é opcional no request.
+    @IsTest
+    static void testSuccessCreateBenefitPackageWithoutOptionalBenefits() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put(
+            'authorization2',
+            'Bearer ' + TOKEN
+        );
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[' +
+                    '{' +
+                        '"benefit_id":"CORE-001"' +
+                    '}' +
+                '],' +
+                '"legal_consents":[' +
+                    '{' +
+                        '"code":"legal_consent_I_understand",' +
+                        '"is_confirmed":true,' +
+                        '"consented_at":"2026-08-11T10:30:45Z"' +
+                    '}' +
+                ']' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(
+            201,
+            RestContext.response.statusCode,
+            'Expected HTTP 201 when optional benefits are omitted.'
+        );
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+
+        System.assertNotEquals(
+            null,
+            response.benefit_package_id,
+            'The response should contain the created package id.'
+        );
+
+        List<ContractLineItem> lineItems = [
+            SELECT Id, Benefit_Category__c
+            FROM ContractLineItem
+            WHERE ServiceContractId = :response.benefit_package_id
+        ];
+
+        System.assertEquals(
+            1,
+            lineItems.size(),
+            'Only the Core benefit should be created.'
+        );
+
+        System.assertEquals(
+            'Core',
+            lineItems[0].Benefit_Category__c
+        );
+    }
+
+    // Cobre a criação sem affected_policy_range e sem legal_consents.
+    @IsTest
+    static void testSuccessCreateBenefitPackageWithoutOptionalFields() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put(
+            'authorization2',
+            'Bearer ' + TOKEN
+        );
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[' +
+                    '{' +
+                        '"benefit_id":"CORE-001"' +
+                    '}' +
+                '],' +
+                '"legal_consents":[]' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(
+            201,
+            RestContext.response.statusCode,
+            'Expected HTTP 201 when optional request objects are omitted.'
+        );
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+
+        ServiceContract contract = [
+            SELECT Id,
+                   Policy_Range_Start__c,
+                   Policy_Range_End__c,
+                   Legal_Consent_Code__c,
+                   Legal_Consent_Confirmed__c,
+                   Legal_Consent_Date__c
+            FROM ServiceContract
+            WHERE Id = :response.benefit_package_id
+            LIMIT 1
+        ];
+
+        System.assertEquals(
+            null,
+            contract.Policy_Range_Start__c,
+            'The policy range start should remain empty.'
+        );
+
+        System.assertEquals(
+            null,
+            contract.Policy_Range_End__c,
+            'The policy range end should remain empty.'
+        );
+
+        System.assertEquals(
+            null,
+            contract.Legal_Consent_Code__c,
+            'The legal consent code should remain empty.'
+        );
+    }
+
+    // Cobre ausência do product_reference obrigatório.
+    @IsTest
+    static void testFailMissingProductReference() {
+
+        String requestBody =
+            '{' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when product_reference is missing.'
+        );
+    }
+
+    // Cobre ausência do active_start_at obrigatório.
+    @IsTest
+    static void testFailMissingActiveStartAt() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when active_start_at is missing.'
+        );
+    }
+
+    // Cobre ausência do active_end_at obrigatório.
+    @IsTest
+    static void testFailMissingActiveEndAt() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when active_end_at is missing.'
+        );
+    }
+
+    // Cobre ausência do amount_of_policies obrigatório.
+    @IsTest
+    static void testFailMissingAmountOfPolicies() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when amount_of_policies is missing.'
+        );
+    }
+
+    // Cobre ausência do core_benefits obrigatório.
+    @IsTest
+    static void testFailMissingCoreBenefits() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when core_benefits is missing.'
+        );
+    }
+
+    // Cobre ausência do legal_consents obrigatório conforme POST_REQUIRED_FIELDS.
+    @IsTest
+    static void testFailMissingLegalConsents() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when legal_consents is missing.'
+        );
+    }
+
+    // Cobre amount_of_policies igual a zero.
+    @IsTest
+    static void testFailAmountOfPoliciesZero() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":0,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when amount_of_policies is zero.'
+        );
+    }
+
+    // Cobre amount_of_policies negativo.
+    @IsTest
+    static void testFailAmountOfPoliciesNegative() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":-1,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when amount_of_policies is negative.'
+        );
+    }
+
+    // Cobre end date igual à start date.
+    @IsTest
+    static void testFailEndDateEqualsStartDate() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2026-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when end date equals start date.'
+        );
+    }
+
+    // Cobre end date anterior à start date.
+    @IsTest
+    static void testFailEndDateBeforeStartDate() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2027-09-01",' +
+                '"active_end_at":"2026-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when end date is before start date.'
+        );
+    }
+
+    // Cobre data inicial em formato inválido.
+    @IsTest
+    static void testFailInvalidStartDate() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"invalid-date",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when active_start_at has an invalid format.'
+        );
+    }
+
+    // Cobre policy range informado sem o campo inicial.
+    @IsTest
+    static void testFailPolicyRangeMissingStart() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"affected_policy_range":{' +
+                    '"external_number_end_at":"1100"' +
+                '},' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when policy range start is missing.'
+        );
+    }
+
+    // Cobre policy range informado sem o campo final.
+    @IsTest
+    static void testFailPolicyRangeMissingEnd() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"affected_policy_range":{' +
+                    '"external_number_start_at":"1000"' +
+                '},' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when policy range end is missing.'
+        );
+    }
+
+    // Cobre product_reference inexistente no catálogo.
+    @IsTest
+    static void testFailProductNotFound() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"PRODUCT-NOT-FOUND",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when the product reference does not exist.'
+        );
+    }
+
+    // Cobre benefit_id inexistente no catálogo.
+    @IsTest
+    static void testFailBenefitNotFound() {
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"BENEFIT-NOT-FOUND"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when the benefit does not exist.'
+        );
+    }
+
+    // Cobre benefício sem Product2 ativo no catálogo.
+    @IsTest
+    static void testFailProduct2NotFoundForBenefit() {
+
+        Benefit__c benefit = [
+            SELECT Id, Visa_External_Reference__c
+            FROM Benefit__c
+            WHERE Visa_External_Reference__c = :CORE_BENEFIT_REFERENCE
+            LIMIT 1
+        ];
+
+        delete [
+            SELECT Id
+            FROM Product2
+            WHERE Benefit__c = :benefit.Id
+            LIMIT 1
+        ];
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when the benefit has no active Product2.'
+        );
+    }
+
+    // Cobre benefício sem PricebookEntry ativo no Benefits Pricebook.
+    @IsTest
+    static void testFailPricebookEntryNotFoundForBenefit() {
+
+        Product2 coreProduct = [
+            SELECT Id, Benefit__c
+            FROM Product2
+            WHERE Benefit__r.Visa_External_Reference__c = :CORE_BENEFIT_REFERENCE
+            LIMIT 1
+        ];
+
+        delete [
+            SELECT Id
+            FROM PricebookEntry
+            WHERE Product2Id = :coreProduct.Id
+            LIMIT 1
+        ];
+
+        String requestBody =
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}';
+
+        executePost(requestBody);
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when the benefit has no PricebookEntry.'
+        );
+    }
+
+    // Cobre JSON inválido enviado no request.
+    @IsTest
+    static void testFailInvalidJson() {
+
+        executePost(
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100'
+        );
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected HTTP 400 when the request body contains invalid JSON.'
+        );
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals(
+            '400',
+            response.status_code
+        );
+
+        System.assertEquals(
+            'Bad Request',
+            response.error
+        );
+    }
+
+    // Cobre chamada POST sem token de autenticação.
+    @IsTest
+    static void testUnauthorizedPost() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'POST';
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{' +
+                '"product_reference":"I_C_BR",' +
+                '"active_start_at":"2026-09-01",' +
+                '"active_end_at":"2027-09-01",' +
+                '"amount_of_policies":100,' +
+                '"core_benefits":[{"benefit_id":"CORE-001"}],' +
+                '"legal_consents":[]' +
+            '}'
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(
+            401,
+            RestContext.response.statusCode,
+            'Expected HTTP 401 when the access token is missing.'
+        );
+    }
+
+    // Cobre POST enviado para um resource path não suportado.
+    @IsTest
+    static void testFailInvalidResourcePath() {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/001/cancel/extra';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put(
+            'authorization2',
+            'Bearer ' + TOKEN
+        );
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+
+        try {
+            BenefitsConfigAPIPackages_VEXP.doPost();
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error,
+                        ex.error_description
+                    )
+                )
+            );
+        }
+
+        Test.stopTest();
+
+        System.assertEquals(
+            404,
+            RestContext.response.statusCode,
+            'Expected HTTP 404 for an unsupported resource path.'
+        );
+    }
+
+    private static void executePost(String requestBody) {
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'POST';
+        RestContext.request.headers.put(
+            'authorization2',
+            'Bearer ' + TOKEN
+        );
+        RestContext.request.requestBody = Blob.valueOf(requestBody);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+    }
+}
