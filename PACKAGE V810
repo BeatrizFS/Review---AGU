@@ -1,3 +1,160 @@
+Método simplificado
+
+private static Map<String, PricebookEntry> getPricebookEntriesByBenefitReference(
+    Map<String, Benefit__c> benefitsByReference,
+    Id pricebookId,
+    String currencyIsoCode
+) {
+    Set<Id> benefitIds = new Set<Id>();
+
+    for (Benefit__c benefit : benefitsByReference.values()) {
+        benefitIds.add(benefit.Id);
+    }
+
+    /*
+     * Os Product2 e PricebookEntry já devem existir na plataforma.
+     * Aqui apenas localizamos o Product2 correspondente ao Benefit.
+     */
+    List<Product2> products = [
+        SELECT Id, Benefit__c
+        FROM Product2
+        WHERE Benefit__c IN :benefitIds
+        AND Family = 'Benefit'
+        AND IsActive = true
+    ];
+
+    Map<Id, Product2> productsByBenefitId = new Map<Id, Product2>();
+
+    for (Product2 product : products) {
+        if (productsByBenefitId.containsKey(product.Benefit__c)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'More than one active Product2 was found for Benefit ' +
+                String.valueOf(product.Benefit__c)
+            );
+        }
+
+        productsByBenefitId.put(product.Benefit__c, product);
+    }
+
+    /*
+     * Valida se todos os Benefits possuem Product2 no catálogo.
+     */
+    for (String benefitReference : benefitsByReference.keySet()) {
+        Benefit__c benefit = benefitsByReference.get(benefitReference);
+
+        if (!productsByBenefitId.containsKey(benefit.Id)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'Product2 for benefit ' + benefitReference +
+                ' was not found in the catalogue.'
+            );
+        }
+    }
+
+    Set<Id> productIds = new Set<Id>();
+
+    for (Product2 product : productsByBenefitId.values()) {
+        productIds.add(product.Id);
+    }
+
+    /*
+     * Busca diretamente os PricebookEntry já existentes.
+     */
+    Map<Id, PricebookEntry> entriesByProductId = new Map<Id, PricebookEntry>();
+
+    for (PricebookEntry entry : [
+        SELECT
+            Id,
+            Product2Id,
+            Pricebook2Id,
+            UnitPrice,
+            IsActive,
+            CurrencyIsoCode
+        FROM PricebookEntry
+        WHERE Pricebook2Id = :pricebookId
+        AND Product2Id IN :productIds
+        AND CurrencyIsoCode = :currencyIsoCode
+    ]) {
+        entriesByProductId.put(entry.Product2Id, entry);
+    }
+
+    /*
+     * Valida se todos os Benefits possuem PricebookEntry
+     * no Pricebook utilizado pelo contrato.
+     */
+    Map<String, PricebookEntry> result = new Map<String, PricebookEntry>();
+
+    for (String benefitReference : benefitsByReference.keySet()) {
+        Benefit__c benefit = benefitsByReference.get(benefitReference);
+        Product2 product = productsByBenefitId.get(benefit.Id);
+
+        PricebookEntry entry = entriesByProductId.get(product.Id);
+
+        if (entry == null || !entry.IsActive) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'Benefit ' + benefitReference +
+                ' is not available in the Benefits Pricebook.'
+            );
+        }
+
+        result.put(benefitReference, entry);
+    }
+
+    return result;
+}
+
+Aplicação de Core x Opcional
+
+A diferenciação pode ficar na criação do "ContractLineItem", por exemplo:
+
+ContractLineItem lineItem = new ContractLineItem();
+
+lineItem.ContractId = contract.Id;
+lineItem.PricebookEntryId = pricebookEntry.Id;
+lineItem.Quantity = 1;
+
+if (isCore) {
+    lineItem.UnitPrice = pricebookEntry.UnitPrice;
+} else {
+    lineItem.UnitPrice = optionalUnitPrice;
+}
+
+Ou, se a regra for simplesmente que Core utiliza o preço cadastrado no "PricebookEntry" e Opcional utiliza outro preço, você pode deixar isso explícito em um método separado:
+
+private static Decimal getContractLineItemUnitPrice(
+    PricebookEntry pricebookEntry,
+    Boolean isCore,
+    Decimal optionalUnitPrice
+) {
+    if (isCore) {
+        return pricebookEntry.UnitPrice;
+    }
+
+    return optionalUnitPrice;
+}
+
+Assim a responsabilidade fica bem separada:
+
+Catálogo
+→ "Benefit__c"
+→ "Product2"
+→ "PricebookEntry"
+
+API
+→ faz "SELECT"
+→ valida existência/atividade
+→ relaciona "PricebookEntryId"
+→ define "ContractLineItem.UnitPrice" conforme Core/Opcional
+
+Isso elimina os "insert" de "PricebookEntry", elimina a necessidade de consultar o Standard Pricebook e reduz o método de uma operação de "get or create" para uma operação de "get and validate".
+
+=================
+
 @RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
 global with sharing class BenefitsConfigAPIPackages_VEXP {
 
