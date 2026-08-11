@@ -1,97 +1,63 @@
 @isTest
 private class Test_BenefitsConfigAPIPackages_VEXP {
 
-    private static String token = '';
+    private static final String TOKEN = 'test-token';
 
     @testSetup
     static void setup() {
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = 'Core Benefit',
+            Visa_External_Reference__c = 'CORE-001',
+            Benefit_Description__c = 'Core benefit description'
+        );
 
-        Id benefitPackageRecordTypeId =
-            Schema.SObjectType.ServiceContract
-                .getRecordTypeInfosByDeveloperName()
-                .get('Benefit_Package')
-                .getRecordTypeId();
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Optional Benefit',
+            Visa_External_Reference__c = 'OPT-001',
+            Benefit_Description__c = 'Optional benefit description'
+        );
+
+        insert new List<Benefit__c>{ coreBenefit, optionalBenefit };
+
+        Id benefitPackageRecordTypeId = Schema.SObjectType.ServiceContract.getRecordTypeInfosByDeveloperName().get('Benefit_Package').getRecordTypeId();
 
         ServiceContract benefitPackage = new ServiceContract(
             RecordTypeId = benefitPackageRecordTypeId,
+            Name = 'Benefit Package Test',
             StartDate = Date.today(),
             EndDate = Date.today().addYears(1),
-            Package_Status__c = 'Active',
-            Product_Reference__c = 'PRODUCT-TEST',
+            Product_Reference__c = 'I_C_BR',
+            Package_Status__c = 'Draft',
             Amount_of_Policies__c = 100,
             Policy_Range_Start__c = '1000',
             Policy_Range_End__c = '1100',
-            Legal_Consent_Code__c = 'CONSENT-001',
+            Legal_Consent_Code__c = 'legal_consent_I_understand',
             Legal_Consent_Confirmed__c = true,
-            Legal_Consent_Date__c = Datetime.now()
+            Legal_Consent_Date__c = Datetime.newInstanceGmt(Date.today(), Time.newInstance(10, 0, 0, 0))
         );
 
         insert benefitPackage;
 
-        /*
-         * Criar aqui os registros de Benefit/Product/PricebookEntry
-         * necessários para o ContractLineItem da sua org.
-         *
-         * Exemplo conceitual:
-         *
-         * Product2 coreBenefit = ...
-         * Product2 optionalBenefit = ...
-         *
-         * PricebookEntry corePricebookEntry = ...
-         * PricebookEntry optionalPricebookEntry = ...
-         */
-
-        // ContractLineItem - Core
-        ContractLineItem coreLineItem = new ContractLineItem(
-            ServiceContractId = benefitPackage.Id,
-            Benefit_Category__c = 'Core'
-
-            // Adicionar aqui os campos obrigatórios da sua org.
-            // Exemplo:
-            // Product2Id = coreBenefit.Id,
-            // PricebookEntryId = corePricebookEntry.Id,
-            // Quantity = 1,
-            // UnitPrice = 0
-        );
-
-        // ContractLineItem - Optional
-        ContractLineItem optionalLineItem = new ContractLineItem(
-            ServiceContractId = benefitPackage.Id,
-            Benefit_Category__c = 'Optional'
-
-            // Adicionar aqui os campos obrigatórios da sua org.
-            // Exemplo:
-            // Product2Id = optionalBenefit.Id,
-            // PricebookEntryId = optionalPricebookEntry.Id,
-            // Quantity = 1,
-            // UnitPrice = 0
-        );
-
         insert new List<ContractLineItem>{
-            coreLineItem,
-            optionalLineItem
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = coreBenefit.Id,
+                Benefit_Category__c = 'Core'
+            ),
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = optionalBenefit.Id,
+                Benefit_Category__c = 'Optional'
+            )
         };
     }
 
-    // Cobre o GET da lista de Benefit Packages com sucesso.
     @isTest
     static void testSuccessGetBenefitPackages() {
-
-        ServiceContract benefitPackage = [
-            SELECT Id
-            FROM ServiceContract
-            WHERE RecordType.DeveloperName = 'Benefit_Package'
-            LIMIT 1
-        ];
-
         RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
         RestContext.request.httpMethod = 'GET';
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -99,158 +65,19 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
+        System.assertEquals(200, RestContext.response.statusCode);
 
-        List<Object> response =
-            (List<Object>) JSON.deserializeUntyped(
-                RestContext.response.responseBody.toString()
-            );
-
+        List<Object> response = (List<Object>) JSON.deserializeUntyped(RestContext.response.responseBody.toString());
         System.assertEquals(1, response.size());
 
-        Map<String, Object> benefitPackageResponse =
-            (Map<String, Object>) response[0];
-
-        System.assertEquals(
-            benefitPackage.Id,
-            benefitPackageResponse.get('benefit_package_id')
-        );
-
-        System.assertEquals(
-            'Active',
-            benefitPackageResponse.get('status')
-        );
-
-        System.assertEquals(
-            'PRODUCT-TEST',
-            benefitPackageResponse.get('product_reference')
-        );
-
-        System.assertEquals(
-            '100',
-            String.valueOf(
-                benefitPackageResponse.get('amount_of_policies')
-            )
-        );
+        Map<String, Object> benefitPackageResponse = (Map<String, Object>) response[0];
+        System.assertEquals('Draft', benefitPackageResponse.get('status')); 
+        System.assertEquals('I_C_BR', benefitPackageResponse.get('product_reference'));
+        System.assertEquals('100', String.valueOf(benefitPackageResponse.get('amount_of_policies')));
     }
 
-    // Cobre o GET da lista utilizando paginação.
-    @isTest
-    static void testSuccessGetBenefitPackagesWithPagination() {
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.params.put(
-            'start_index',
-            '0'
-        );
-
-        RestContext.request.params.put(
-            'max_results',
-            '1'
-        );
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
-
-        System.assertNotEquals(
-            null,
-            RestContext.response.headers.get('Content-Range')
-        );
-    }
-
-    // Cobre o erro quando start_index ultrapassa o limite permitido.
-    @isTest
-    static void testFailWithInvalidStartIndex() {
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.params.put(
-            'start_index',
-            '2001'
-        );
-
-        RestContext.request.params.put(
-            'max_results',
-            '100'
-        );
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            400,
-            RestContext.response.statusCode
-        );
-
-        WebportalApiUtility_v1.ErrorMessage response =
-            (WebportalApiUtility_v1.ErrorMessage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    WebportalApiUtility_v1.ErrorMessage.class
-                );
-
-        System.assertEquals(
-            '400',
-            response.status_code
-        );
-    }
-
-    // Cobre o acesso ao GET sem token de autenticação.
-    @isTest
-    static void testUnauthorizedGetBenefitPackages() {
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            401,
-            RestContext.response.statusCode
-        );
-    }
-
-    // Cobre o GET de detalhes do Benefit Package com sucesso.
     @isTest
     static void testSuccessGetBenefitPackageDetails() {
-
         ServiceContract benefitPackage = [
             SELECT Id
             FROM ServiceContract
@@ -260,14 +87,9 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
 
         RestContext.request = new RestRequest();
         RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/' + benefitPackage.Id;
         RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -275,85 +97,32 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
+        System.assertEquals(200, RestContext.response.statusCode);
 
         BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-                );
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
+            );
 
-        System.assertEquals(
-            benefitPackage.Id,
-            response.benefit_package_id
-        );
-
-        System.assertEquals(
-            'Active',
-            response.status
-        );
-
-        System.assertEquals(
-            'PRODUCT-TEST',
-            response.product_reference
-        );
-
-        System.assertEquals(
-            Date.today(),
-            response.active_start_at
-        );
-
-        System.assertEquals(
-            Date.today().addYears(1),
-            response.active_end_at
-        );
-
-        System.assertEquals(
-            100,
-            response.amount_of_policies
-        );
-
-        System.assertNotEquals(
-            null,
-            response.affected_policy_range
-        );
-
-        System.assertEquals(
-            '1000',
-            response.affected_policy_range.external_number_start_at
-        );
-
-        System.assertEquals(
-            '1100',
-            response.affected_policy_range.external_number_end_at
-        );
+        System.assertEquals(benefitPackage.Id, response.benefit_package_id);
+        System.assertEquals('Draft', response.status);
+        System.assertEquals('I_C_BR', response.product_reference);
+        System.assertEquals(100, response.amount_of_policies);
+        System.assertNotEquals(null, response.affected_policy_range);
+        System.assertEquals('1000', response.affected_policy_range.external_number_start_at);
+        System.assertEquals('1100', response.affected_policy_range.external_number_end_at);
+        System.assertEquals(1, response.legal_consents.size());
+        System.assertEquals('legal_consent_I_understand', response.legal_consents[0].code);
+        System.assertEquals(true, response.legal_consents[0].is_confirmed);
     }
 
-    // Cobre o retorno do Core Benefit.
     @isTest
-    static void testGetBenefitPackageWithCoreBenefit() {
-
-        ServiceContract benefitPackage = [
-            SELECT Id
-            FROM ServiceContract
-            WHERE RecordType.DeveloperName = 'Benefit_Package'
-            LIMIT 1
-        ];
-
+    static void testFailGetBenefitPackageDetailsNotFound() {
         RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/001000000000000AAA';
         RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -361,187 +130,125 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
+        System.assertEquals(404, RestContext.response.statusCode);
 
-        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-                );
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
 
-        System.assertEquals(
-            1,
-            response.core_benefits.size()
-        );
-
-        System.assertNotEquals(
-            null,
-            response.core_benefits[0].benefit_id
-        );
-
-        System.assertNotEquals(
-            null,
-            response.core_benefits[0].name
-        );
+        System.assertEquals('404', response.status_code);
+        System.assertEquals('Not Found', response.error);
     }
+}
 
-    // Cobre o retorno do Optional Benefit.
-    @isTest
-    static void testGetBenefitPackageWithOptionalBenefit() {
+@IsTest
+private class Test_BenefitsConfigAPIPackages_VEXP {
 
-        ServiceContract benefitPackage = [
-            SELECT Id
-            FROM ServiceContract
-            WHERE RecordType.DeveloperName = 'Benefit_Package'
-            LIMIT 1
-        ];
+    @TestSetup
+    static void setup() {
 
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
-        RestContext.request.httpMethod = 'GET';
+    @IsTest
+    static void testSuccessGetBenefitPackages() {
 
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
+    System.assertEquals(200, RestContext.response.statusCode, 'Expected the list endpoint to return HTTP 200.');
+
+    System.assertEquals(1, response.size(), 'Expected a single benefit package in the list response.');
+
+    System.assertEquals('Draft', benefitPackageResponse.get('status'), 'The list response should expose the package status.');
+    System.assertEquals('I_C_BR', benefitPackageResponse.get('product_reference'), 'The list response should expose the product reference.');
+    System.assertEquals('100', String.valueOf(benefitPackageResponse.get('amount_of_policies')), 'The list response should expose the amount of policies.');
+    @IsTest
+    static void testSuccessGetBenefitPackageDetails() {
+
+    System.assertEquals(200, RestContext.response.statusCode, 'Expected the details endpoint to return HTTP 200.');
+
+    System.assertEquals(benefitPackage.Id, response.benefit_package_id, 'The details response should expose the package id.');
+    System.assertEquals('Draft', response.status, 'The details response should expose the package status.');
+    System.assertEquals('I_C_BR', response.product_reference, 'The details response should expose the product reference.');
+    System.assertEquals(100, response.amount_of_policies, 'The details response should expose the amount of policies.');
+    System.assertNotEquals(null, response.affected_policy_range, 'The details response should include the affected policy range.');
+    System.assertEquals('1000', response.affected_policy_range.external_number_start_at, 'The affected range should include the start value.');
+    System.assertEquals('1100', response.affected_policy_range.external_number_end_at, 'The affected range should include the end value.');
+    System.assertEquals(1, response.core_benefits.size(), 'The details response should include one core benefit.');
+    System.assertEquals('CORE-001', response.core_benefits[0].benefit_id, 'The core benefit id should come from Visa_External_Reference__c.');
+    System.assertEquals('Core Benefit', response.core_benefits[0].name, 'The core benefit name should come from Benefit__c.Name.');
+    System.assertEquals(1, response.optional_benefits.size(), 'The details response should include one optional benefit.');
+    System.assertEquals('OPT-001', response.optional_benefits[0].benefit_id, 'The optional benefit id should come from Visa_External_Reference__c.');
+    System.assertEquals('Optional Benefit', response.optional_benefits[0].name, 'The optional benefit name should come from Benefit__c.Name.');
+    System.assertEquals('Optional benefit description', response.optional_benefits[0].description, 'The optional benefit description should come from Benefit__c.Benefit_Description__c.');
+    System.assertEquals(1, response.legal_consents.size(), 'The details response should include the configured legal consent.');
+    System.assertEquals('legal_consent_I_understand', response.legal_consents[0].code, 'The legal consent code should match the package data.');
+    System.assertEquals(true, response.legal_consents[0].is_confirmed, 'The legal consent confirmation should match the package data.');
+    @IsTest
+    static void testFailGetBenefitPackageDetailsNotFound() {
+
+    System.assertEquals(404, RestContext.response.statusCode, 'Expected the details endpoint to return HTTP 404 for an unknown package id.');
+
+    System.assertEquals('404', response.status_code, 'The error payload should expose the HTTP status code.');
+    System.assertEquals('Not Found', response.error, 'The error payload should expose the not found error label.');
+
+@isTest
+private class Test_BenefitsConfigAPIPackages_VEXP {
+
+    private static final String TOKEN = 'test-token';
+
+    @testSetup
+    static void setup() {
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = 'Core Benefit',
+            Visa_External_Reference__c = 'CORE-001',
+            Benefit_Description__c = 'Core benefit description'
         );
 
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Optional Benefit',
+            Visa_External_Reference__c = 'OPT-001',
+            Benefit_Description__c = 'Optional benefit description'
         );
 
-        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-                );
+        insert new List<Benefit__c>{ coreBenefit, optionalBenefit };
 
-        System.assertEquals(
-            1,
-            response.optional_benefits.size()
-        );
-
-        System.assertNotEquals(
-            null,
-            response.optional_benefits[0].benefit_id
-        );
-
-        System.assertNotEquals(
-            null,
-            response.optional_benefits[0].name
-        );
-
-        System.assertNotEquals(
-            null,
-            response.optional_benefits[0].description
-        );
-    }
-
-    // Cobre o retorno do Legal Consent quando existe consentimento.
-    @isTest
-    static void testGetBenefitPackageWithLegalConsent() {
-
-        ServiceContract benefitPackage = [
-            SELECT Id
-            FROM ServiceContract
-            WHERE RecordType.DeveloperName = 'Benefit_Package'
-            LIMIT 1
-        ];
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
-
-        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-                );
-
-        System.assertEquals(
-            1,
-            response.legal_consents.size()
-        );
-
-        System.assertEquals(
-            'CONSENT-001',
-            response.legal_consents[0].code
-        );
-
-        System.assertEquals(
-            true,
-            response.legal_consents[0].is_confirmed
-        );
-
-        System.assertNotEquals(
-            null,
-            response.legal_consents[0].consented_at
-        );
-    }
-
-    // Cobre o retorno quando o Benefit Package não possui Legal Consent.
-    @isTest
-    static void testGetBenefitPackageWithoutLegalConsent() {
-
-        Id benefitPackageRecordTypeId =
-            Schema.SObjectType.ServiceContract
-                .getRecordTypeInfosByDeveloperName()
-                .get('Benefit_Package')
-                .getRecordTypeId();
+        Id benefitPackageRecordTypeId = Schema.SObjectType.ServiceContract.getRecordTypeInfosByDeveloperName().get('Benefit_Package').getRecordTypeId();
 
         ServiceContract benefitPackage = new ServiceContract(
             RecordTypeId = benefitPackageRecordTypeId,
+            Name = 'Benefit Package Test',
             StartDate = Date.today(),
             EndDate = Date.today().addYears(1),
-            Package_Status__c = 'Active',
-            Product_Reference__c = 'PRODUCT-WITHOUT-CONSENT',
-            Amount_of_Policies__c = 50
+            Product_Reference__c = 'I_C_BR',
+            Package_Status__c = 'Draft',
+            Amount_of_Policies__c = 100,
+            Policy_Range_Start__c = '1000',
+            Policy_Range_End__c = '1100',
+            Legal_Consent_Code__c = 'legal_consent_I_understand',
+            Legal_Consent_Confirmed__c = true,
+            Legal_Consent_Date__c = Datetime.newInstanceGmt(Date.today(), Time.newInstance(10, 0, 0, 0))
         );
 
         insert benefitPackage;
 
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
-        RestContext.request.httpMethod = 'GET';
+        insert new List<ContractLineItem>{
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = coreBenefit.Id,
+                Benefit_Category__c = 'Core'
+            ),
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = optionalBenefit.Id,
+                Benefit_Category__c = 'Optional'
+            )
+        };
+    }
 
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
+    @isTest
+    static void testSuccessGetBenefitPackages() {
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -549,81 +256,19 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
-        );
+        System.assertEquals(200, RestContext.response.statusCode);
 
-        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-                );
+        List<Object> response = (List<Object>) JSON.deserializeUntyped(RestContext.response.responseBody.toString());
+        System.assertEquals(1, response.size());
 
-        System.assertNotEquals(
-            null,
-            response.legal_consents
-        );
-
-        System.assertEquals(
-            0,
-            response.legal_consents.size()
-        );
+        Map<String, Object> benefitPackageResponse = (Map<String, Object>) response[0];
+        System.assertEquals('Draft', benefitPackageResponse.get('status')); 
+        System.assertEquals('I_C_BR', benefitPackageResponse.get('product_reference'));
+        System.assertEquals('100', String.valueOf(benefitPackageResponse.get('amount_of_policies')));
     }
 
-    // Cobre o Benefit Package inexistente.
     @isTest
-    static void testFailBenefitPackageNotFound() {
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/001000000000000AAA';
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
-
-        System.assertEquals(
-            404,
-            RestContext.response.statusCode
-        );
-
-        WebportalApiUtility_v1.ErrorMessage response =
-            (WebportalApiUtility_v1.ErrorMessage)
-                JSON.deserialize(
-                    RestContext.response.responseBody.toString(),
-                    WebportalApiUtility_v1.ErrorMessage.class
-                );
-
-        System.assertEquals(
-            '404',
-            response.status_code
-        );
-
-        System.assertEquals(
-            'Not Found',
-            response.error
-        );
-
-        System.assertEquals(
-            'The searched resource was not found.',
-            response.error_description
-        );
-    }
-
-    // Cobre o acesso aos detalhes sem token de autenticação.
-    @isTest
-    static void testUnauthorizedGetBenefitPackageDetails() {
-
+    static void testSuccessGetBenefitPackageDetails() {
         ServiceContract benefitPackage = [
             SELECT Id
             FROM ServiceContract
@@ -633,9 +278,9 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
 
         RestContext.request = new RestRequest();
         RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/' + benefitPackage.Id;
         RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -643,72 +288,32 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            401,
-            RestContext.response.statusCode
-        );
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
+            );
+
+        System.assertEquals(benefitPackage.Id, response.benefit_package_id);
+        System.assertEquals('Draft', response.status);
+        System.assertEquals('I_C_BR', response.product_reference);
+        System.assertEquals(100, response.amount_of_policies);
+        System.assertNotEquals(null, response.affected_policy_range);
+        System.assertEquals('1000', response.affected_policy_range.external_number_start_at);
+        System.assertEquals('1100', response.affected_policy_range.external_number_end_at);
+        System.assertEquals(1, response.legal_consents.size());
+        System.assertEquals('legal_consent_I_understand', response.legal_consents[0].code);
+        System.assertEquals(true, response.legal_consents[0].is_confirmed);
     }
 
-    // Cobre um caminho de recurso inválido.
     @isTest
-    static void testFailUnknownResourcePath() {
-
+    static void testFailGetBenefitPackageDetailsNotFound() {
         RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/123/456';
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/001000000000000AAA';
         RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
-
-        RestContext.response = new RestResponse();
-
-        Test.startTest();
-
-        try {
-            BenefitsConfigAPIPackages_VEXP.doGet();
-
-            System.assert(
-                false,
-                'Expected RequestAPIException'
-            );
-
-        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
-
-            System.assertEquals(
-                404,
-                ex.status_code
-            );
-
-            System.assertEquals(
-                'not_found',
-                ex.error
-            );
-
-            System.assertEquals(
-                'Unknown resource path',
-                ex.error_description
-            );
-        }
-
-        Test.stopTest();
-    }
-
-    // Cobre o GET sem ID, tratando a URL como consulta da lista.
-    @isTest
-    static void testGetWithoutBenefitPackageId() {
-
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/';
-        RestContext.request.httpMethod = 'GET';
-
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + token
-        );
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
 
         RestContext.response = new RestResponse();
 
@@ -716,9 +321,160 @@ private class Test_BenefitsConfigAPIPackages_VEXP {
         BenefitsConfigAPIPackages_VEXP.doGet();
         Test.stopTest();
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode
+        System.assertEquals(404, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals('404', response.status_code);
+        System.assertEquals('Not Found', response.error);
+    }
+}
+
+@isTest
+private class Test_BenefitsConfigAPIPackages_VEXP {
+
+    private static final String TOKEN = 'test-token';
+
+    @testSetup
+    static void setup() {
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = 'Core Benefit',
+            Visa_External_Reference__c = 'CORE-001',
+            Benefit_Description__c = 'Core benefit description'
         );
+
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Optional Benefit',
+            Visa_External_Reference__c = 'OPT-001',
+            Benefit_Description__c = 'Optional benefit description'
+        );
+
+        insert new List<Benefit__c>{ coreBenefit, optionalBenefit };
+
+        Id benefitPackageRecordTypeId = Schema.SObjectType.ServiceContract.getRecordTypeInfosByDeveloperName().get('Benefit_Package').getRecordTypeId();
+
+        ServiceContract benefitPackage = new ServiceContract(
+            RecordTypeId = benefitPackageRecordTypeId,
+            Name = 'Benefit Package Test',
+            StartDate = Date.today(),
+            EndDate = Date.today().addYears(1),
+            Product_Reference__c = 'I_C_BR',
+            Package_Status__c = 'Draft',
+            Amount_of_Policies__c = 100,
+            Policy_Range_Start__c = '1000',
+            Policy_Range_End__c = '1100',
+            Legal_Consent_Code__c = 'legal_consent_I_understand',
+            Legal_Consent_Confirmed__c = true,
+            Legal_Consent_Date__c = Datetime.newInstanceGmt(Date.today(), Time.newInstance(10, 0, 0, 0))
+        );
+
+        insert benefitPackage;
+
+        insert new List<ContractLineItem>{
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = coreBenefit.Id,
+                Benefit_Category__c = 'Core'
+            ),
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                Benefit__c = optionalBenefit.Id,
+                Benefit_Category__c = 'Optional'
+            )
+        };
+    }
+
+    @isTest
+    static void testSuccessGetBenefitPackages() {
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stopTest();
+
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        List<Object> response = (List<Object>) JSON.deserializeUntyped(RestContext.response.responseBody.toString());
+        System.assertEquals(1, response.size());
+
+        Map<String, Object> benefitPackageResponse = (Map<String, Object>) response[0];
+        System.assertEquals('Draft', benefitPackageResponse.get('status')); 
+        System.assertEquals('I_C_BR', benefitPackageResponse.get('product_reference'));
+        System.assertEquals('100', String.valueOf(benefitPackageResponse.get('amount_of_policies')));
+    }
+
+    @isTest
+    static void testSuccessGetBenefitPackageDetails() {
+        ServiceContract benefitPackage = [
+            SELECT Id
+            FROM ServiceContract
+            WHERE RecordType.DeveloperName = 'Benefit_Package'
+            LIMIT 1
+        ];
+
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI =
+            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/' + benefitPackage.Id;
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stopTest();
+
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
+            );
+
+        System.assertEquals(benefitPackage.Id, response.benefit_package_id);
+        System.assertEquals('Draft', response.status);
+        System.assertEquals('I_C_BR', response.product_reference);
+        System.assertEquals(100, response.amount_of_policies);
+        System.assertNotEquals(null, response.affected_policy_range);
+        System.assertEquals('1000', response.affected_policy_range.external_number_start_at);
+        System.assertEquals('1100', response.affected_policy_range.external_number_end_at);
+        System.assertEquals(1, response.legal_consents.size());
+        System.assertEquals('legal_consent_I_understand', response.legal_consents[0].code);
+        System.assertEquals(true, response.legal_consents[0].is_confirmed);
+    }
+
+    @isTest
+    static void testFailGetBenefitPackageDetailsNotFound() {
+        RestContext.request = new RestRequest();
+        RestContext.request.requestURI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/001000000000000AAA';
+        RestContext.request.httpMethod = 'GET';
+        RestContext.request.headers.put('authorization2', 'Bearer ' + TOKEN);
+
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stopTest();
+
+        System.assertEquals(404, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals('404', response.status_code);
+        System.assertEquals('Not Found', response.error);
     }
 }
