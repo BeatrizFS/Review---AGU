@@ -1,0 +1,7 @@
+    private static Id benefitsPricebookId;
+    static {
+        List<Pricebook2> pricebooks = [SELECT Id FROM Pricebook2 WHERE Name = :BENEFITS_PRICEBOOK_NAME AND IsActive = true LIMIT 1];
+        if (!pricebooks.isEmpty()) {
+            benefitsPricebookId = pricebooks[0].Id;
+        }
+    }
