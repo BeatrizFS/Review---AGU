@@ -1,0 +1,1480 @@
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class BenefitsConfigAPIPackages_VEXP {
+
+    private static final String RESOURCE_PATH = '/benefit_packages';
+
+    private static final String ACTION_CANCEL = 'cancel';
+    private static final String ACTION_COMPLETE = 'complete';
+
+    private static final String BENEFITS_PRICEBOOK_NAME = 'Visa Benefits';
+    private static final String BENEFIT_PACKAGE_RECORD_TYPE = 'Benefit_Package';
+
+    private static final String DEFAULT_CURRENCY_ISO_CODE = 'USD';
+
+    private static final String ERROR_BAD_REQUEST = 'Bad Request';
+    private static final String ERROR_NOT_FOUND = 'Not Found';
+    private static final String ERROR_INTERNAL_SERVER = 'Internal Server Error';
+
+    private static final String MESSAGE_INVALID_REQUEST =
+        'The input information received were not compliant with the endpoint specification.';
+
+    private static final Set<String> POST_REQUIRED_FIELDS = new Set<String>{
+        'product_reference',
+        'active_start_at',
+        'active_end_at',
+        'amount_of_policies',
+        'core_benefits',
+        'optional_benefits',
+        'legal_consents'
+    };
+
+    private static final Map<String, String> PACKAGE_STATUS = new Map<String, String>{
+        'DRAFT'         => 'Draft',
+        'AWAITING_START'=> 'Awaiting Start',
+        'ACTIVE'        => 'Active',
+        'CANCELLED'     => 'Cancelled',
+        'EXPIRED'       => 'Expired'
+    };
+
+    private static Id benefitsPricebookId;
+
+
+    // ============================================================
+    // GET
+    // ============================================================
+
+    @HttpGet
+    global static void doGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        try {
+            List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+            if (segments.isEmpty()) {
+                handleGet();
+            } else if (segments.size() == 1) {
+                handleGetDetails(segments[0]);
+            } else {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    404,
+                    ERROR_NOT_FOUND,
+                    'Unknown resource path.'
+                );
+            }
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            writeErrorResponse(ex.status_code, ex.error, ex.error_description);
+        } catch (Exception ex) {
+            writeInternalServerError(
+                'Unexpected error retrieving benefit package information.',
+                ex
+            );
+        }
+    }
+
+
+    // ============================================================
+    // POST
+    // ============================================================
+
+    @HttpPost
+    global static void doPost() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+
+        try {
+            List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+            if (segments.isEmpty()) {
+                handleCreate();
+                return;
+            }
+
+            if (segments.size() == 2 && ACTION_CANCEL == segments[1]) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    501,
+                    'Not Implemented',
+                    'The cancel action is not implemented.'
+                );
+            }
+
+            if (segments.size() == 2 && ACTION_COMPLETE == segments[1]) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    501,
+                    'Not Implemented',
+                    'The complete action is not implemented.'
+                );
+            }
+
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                ERROR_NOT_FOUND,
+                'Unknown resource path.'
+            );
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            writeErrorResponse(ex.status_code, ex.error, ex.error_description);
+        } catch (Exception ex) {
+            writeInternalServerError(
+                'Unexpected error creating the benefit package.',
+                ex
+            );
+        }
+    }
+
+
+    // ============================================================
+    // CREATE
+    // ============================================================
+
+    private static void handleCreate() {
+
+        try {
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                    'urn:axa.partners.benefits_platform.write'
+                }
+            );
+
+            String requestBody = getSanitizedRequestBody();
+
+            BenefitPackage benefitPackageRequest =
+                (BenefitPackage) JSON.deserializeStrict(
+                    requestBody,
+                    BenefitPackage.class
+                );
+
+            WebportalApiUtility_v1.validateRequestRequiredFields(
+                requestBody,
+                POST_REQUIRED_FIELDS
+            );
+
+            DateRange dateRange = validateCreateRequest(benefitPackageRequest);
+
+            Product__c product = getProductByReference(
+                benefitPackageRequest.product_reference
+            );
+
+            Id pricebookId = getBenefitsPricebookId();
+
+            Map<String, Benefit__c> benefitsByReference =
+                getBenefitsByExternalReference(benefitPackageRequest);
+
+            Map<String, PricebookEntry> pricebookEntriesByBenefit =
+                getPricebookEntriesByBenefitReference(
+                    benefitsByReference,
+                    pricebookId,
+                    DEFAULT_CURRENCY_ISO_CODE
+                );
+
+            ServiceContract contract = buildServiceContract(
+                benefitPackageRequest,
+                product,
+                pricebookId,
+                dateRange.startDate,
+                dateRange.endDate
+            );
+
+            insert contract;
+
+            List<ContractLineItem> lineItems = buildContractLineItems(
+                contract.Id,
+                benefitPackageRequest,
+                benefitsByReference,
+                pricebookEntriesByBenefit,
+                dateRange.startDate,
+                dateRange.endDate
+            );
+
+            insert lineItems;
+
+            BenefitPackagePostResponse responsePayload =
+                new BenefitPackagePostResponse();
+
+            responsePayload.benefit_package_id = contract.Id;
+
+            RestContext.response.statusCode = 201;
+            RestContext.response.responseBody =
+                Blob.valueOf(JSON.serializePretty(responsePayload));
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            writeErrorResponse(
+                ex.status_code,
+                ex.error,
+                ex.error_description
+            );
+
+        } catch (JSONException ex) {
+            writeErrorResponse(
+                400,
+                ERROR_BAD_REQUEST,
+                MESSAGE_INVALID_REQUEST
+            );
+
+        } catch (DMLException ex) {
+            System.debug(
+                LoggingLevel.ERROR,
+                'DMLException: ' + ex.getMessage()
+            );
+
+            writeErrorResponse(
+                500,
+                'database_internal_server_error',
+                'Error when trying to insert the record in the database.'
+            );
+
+        } catch (Exception ex) {
+            writeInternalServerError(
+                'Unexpected error creating the benefit package.',
+                ex
+            );
+        }
+    }
+
+
+    // ============================================================
+    // GET LIST
+    // ============================================================
+
+    private static void handleGet() {
+
+        try {
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                    'urn:axa.partners.benefits_platform.read_only'
+                }
+            );
+
+            Map<String, Integer> paginationParams =
+                WebportalApiUtility_v1.validatePaginationQueryParams(
+                    RestContext.request.params,
+                    100
+                );
+
+            Integer startIndex = paginationParams.get('start_index');
+            Integer maxResults = paginationParams.get('max_results');
+
+            if (startIndex > 2000) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'start_index cannot be greater than 2000.'
+                );
+            }
+
+            List<ServiceContract> benefitPackages = [
+                SELECT
+                    Id,
+                    Package_Status__c,
+                    Product_Reference__c,
+                    StartDate,
+                    EndDate,
+                    Amount_of_Policies__c
+                FROM ServiceContract
+                WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+                ORDER BY CreatedDate DESC
+                LIMIT :maxResults
+                OFFSET :startIndex
+            ];
+
+            RestContext.response.statusCode = 200;
+
+            RestContext.response.addHeader(
+                'Content-Range',
+                WebportalApiUtility_v1.getContentRangeHeader(
+                    startIndex,
+                    benefitPackages.size(),
+                    benefitPackages.size()
+                )
+            );
+
+            RestContext.response.responseBody =
+                Blob.valueOf(
+                    JSON.serializePretty(
+                        buildBenefitPackageListResponse(benefitPackages),
+                        true
+                    )
+                );
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            writeErrorResponse(
+                ex.status_code,
+                ex.error,
+                ex.error_description
+            );
+
+        } catch (Exception ex) {
+            writeInternalServerError(
+                'Unexpected error retrieving benefit packages.',
+                ex
+            );
+        }
+    }
+
+
+    // ============================================================
+    // GET DETAILS
+    // ============================================================
+
+    private static void handleGetDetails(String benefitPackageId) {
+
+        try {
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.read_only',
+                    'urn:axa.partners.benefits_platform.read_only'
+                }
+            );
+
+            List<ServiceContract> packages = [
+                SELECT
+                    Id,
+                    Package_Status__c,
+                    Product_Reference__c,
+                    StartDate,
+                    EndDate,
+                    Amount_of_Policies__c,
+                    Policy_Range_Start__c,
+                    Policy_Range_End__c,
+                    Legal_Consent_Code__c,
+                    Legal_Consent_Confirmed__c,
+                    Legal_Consent_Date__c
+                FROM ServiceContract
+                WHERE Id = :benefitPackageId
+                AND RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+                LIMIT 1
+            ];
+
+            if (packages.isEmpty()) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    404,
+                    ERROR_NOT_FOUND,
+                    'The searched resource was not found.'
+                );
+            }
+
+            ServiceContract benefitPackage = packages[0];
+
+            List<ContractLineItem> lineItems = [
+                SELECT
+                    Id,
+                    Benefit_Category__c,
+                    PricebookEntry.Product2.Benefit__r.Visa_External_Reference__c,
+                    PricebookEntry.Product2.Benefit__r.Name,
+                    PricebookEntry.Product2.Benefit__r.Benefit_Description__c
+                FROM ContractLineItem
+                WHERE ServiceContractId = :benefitPackage.Id
+                ORDER BY CreatedDate ASC
+            ];
+
+            RestContext.response.statusCode = 200;
+
+            RestContext.response.responseBody =
+                Blob.valueOf(
+                    JSON.serializePretty(
+                        buildBenefitPackageResponse(
+                            benefitPackage,
+                            lineItems
+                        )
+                    )
+                );
+
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            writeErrorResponse(
+                ex.status_code,
+                ex.error,
+                ex.error_description
+            );
+
+        } catch (Exception ex) {
+            writeInternalServerError(
+                'Unexpected error retrieving benefit package.',
+                ex
+            );
+        }
+    }
+
+
+    // ============================================================
+    // VALIDATION
+    // ============================================================
+
+    private static DateRange validateCreateRequest(
+        BenefitPackage request
+    ) {
+
+        if (request == null) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                MESSAGE_INVALID_REQUEST
+            );
+        }
+
+        Date startDate;
+        Date endDate;
+
+        try {
+            startDate = WebportalApiUtility_v1.parseDate(
+                request.active_start_at
+            );
+
+            endDate = WebportalApiUtility_v1.parseDate(
+                request.active_end_at
+            );
+        } catch (Exception ex) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'active_start_at and active_end_at must be valid dates.'
+            );
+        }
+
+        if (endDate < startDate) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'active_end_at must be greater than or equal to active_start_at.'
+            );
+        }
+
+        if (
+            request.amount_of_policies == null ||
+            request.amount_of_policies < 1
+        ) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'amount_of_policies must be a positive integer.'
+            );
+        }
+
+        if (
+            request.core_benefits == null ||
+            request.core_benefits.isEmpty()
+        ) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'core_benefits must contain at least one item.'
+            );
+        }
+
+        validateBenefitsRequest(request);
+
+        validateAffectedPolicyRange(
+            request.affected_policy_range
+        );
+
+        validateLegalConsents(
+            request.legal_consents
+        );
+
+        DateRange result = new DateRange();
+        result.startDate = startDate;
+        result.endDate = endDate;
+
+        return result;
+    }
+
+
+    private static void validateBenefitsRequest(
+        BenefitPackage request
+    ) {
+
+        Set<String> benefitReferences = new Set<String>();
+
+        for (CoreBenefit benefit : request.core_benefits) {
+
+            if (benefit == null || String.isBlank(benefit.benefit_id)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'core_benefits.benefit_id is required.'
+                );
+            }
+
+            if (!benefitReferences.add(benefit.benefit_id)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'Benefit ' + benefit.benefit_id + ' cannot be repeated.'
+                );
+            }
+        }
+
+        if (request.optional_benefits != null) {
+
+            for (OptionalBenefit benefit : request.optional_benefits) {
+
+                if (
+                    benefit == null ||
+                    String.isBlank(benefit.benefit_id)
+                ) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        ERROR_BAD_REQUEST,
+                        'optional_benefits.benefit_id is required.'
+                    );
+                }
+
+                if (!benefitReferences.add(benefit.benefit_id)) {
+                    throw new WebportalApiUtility_v1.RequestAPIException(
+                        400,
+                        ERROR_BAD_REQUEST,
+                        'Benefit ' + benefit.benefit_id + ' cannot be repeated.'
+                    );
+                }
+            }
+        }
+    }
+
+
+    private static void validateAffectedPolicyRange(
+        AffectedPolicyRange policyRange
+    ) {
+
+        if (policyRange == null) {
+            return;
+        }
+
+        if (String.isBlank(policyRange.external_number_start_at)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'affected_policy_range.external_number_start_at is required when policy range is specified.'
+            );
+        }
+
+        if (String.isBlank(policyRange.external_number_end_at)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'affected_policy_range.external_number_end_at is required when policy range is specified.'
+            );
+        }
+    }
+
+
+    private static void validateLegalConsents(
+        List<LegalConsentItem> legalConsents
+    ) {
+
+        if (legalConsents == null || legalConsents.isEmpty()) {
+            return;
+        }
+
+        LegalConsentItem consent = legalConsents[0];
+
+        if (String.isBlank(consent.code)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'legal_consents.code is required.'
+            );
+        }
+
+        if (String.isBlank(consent.consented_at)) {
+            return;
+        }
+
+        try {
+            parseConsentDate(consent.consented_at);
+        } catch (Exception ex) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'legal_consents.consented_at must be a valid ISO 8601 datetime.'
+            );
+        }
+    }
+
+
+    // ============================================================
+    // PRICEBOOK
+    // ============================================================
+
+    private static Id getBenefitsPricebookId() {
+
+        if (benefitsPricebookId != null) {
+            return benefitsPricebookId;
+        }
+
+        List<Pricebook2> pricebooks = [
+            SELECT Id
+            FROM Pricebook2
+            WHERE Name = :BENEFITS_PRICEBOOK_NAME
+            AND IsActive = true
+            LIMIT 1
+        ];
+
+        if (pricebooks.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'Benefits pricebook is not configured.'
+            );
+        }
+
+        benefitsPricebookId = pricebooks[0].Id;
+
+        return benefitsPricebookId;
+    }
+
+
+    // ============================================================
+    // PRODUCT
+    // ============================================================
+
+    private static Product__c getProductByReference(
+        String productReference
+    ) {
+
+        List<Product__c> products = [
+            SELECT Id
+            FROM Product__c
+            WHERE Key__c = :productReference
+            LIMIT 1
+        ];
+
+        if (products.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'Product with reference ' +
+                productReference +
+                ' not found.'
+            );
+        }
+
+        return products[0];
+    }
+
+
+    // ============================================================
+    // BENEFITS
+    // ============================================================
+
+    private static Map<String, Benefit__c> getBenefitsByExternalReference(
+        BenefitPackage request
+    ) {
+
+        Set<String> requestedBenefitIds = new Set<String>();
+
+        for (CoreBenefit benefit : request.core_benefits) {
+            requestedBenefitIds.add(benefit.benefit_id);
+        }
+
+        if (request.optional_benefits != null) {
+            for (OptionalBenefit benefit : request.optional_benefits) {
+                requestedBenefitIds.add(benefit.benefit_id);
+            }
+        }
+
+        List<Benefit__c> benefits = [
+            SELECT
+                Id,
+                Visa_External_Reference__c,
+                Name,
+                Benefit_Description__c
+            FROM Benefit__c
+            WHERE Visa_External_Reference__c IN :requestedBenefitIds
+        ];
+
+        Map<String, Benefit__c> benefitsByReference =
+            new Map<String, Benefit__c>();
+
+        for (Benefit__c benefit : benefits) {
+
+            if (
+                benefitsByReference.containsKey(
+                    benefit.Visa_External_Reference__c
+                )
+            ) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'More than one Benefit was found for reference ' +
+                    benefit.Visa_External_Reference__c + '.'
+                );
+            }
+
+            benefitsByReference.put(
+                benefit.Visa_External_Reference__c,
+                benefit
+            );
+        }
+
+        for (String benefitReference : requestedBenefitIds) {
+
+            if (!benefitsByReference.containsKey(benefitReference)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'Benefit ' +
+                    benefitReference +
+                    ' was not found in the catalogue.'
+                );
+            }
+        }
+
+        return benefitsByReference;
+    }
+
+
+    // ============================================================
+    // PRICEBOOK ENTRIES
+    // ============================================================
+
+    private static Map<String, PricebookEntry>
+    getPricebookEntriesByBenefitReference(
+        Map<String, Benefit__c> benefitsByReference,
+        Id pricebookId,
+        String currencyIsoCode
+    ) {
+
+        Set<Id> benefitIds = new Set<Id>();
+
+        for (Benefit__c benefit : benefitsByReference.values()) {
+            benefitIds.add(benefit.Id);
+        }
+
+        List<Product2> products = [
+            SELECT
+                Id,
+                Benefit__c
+            FROM Product2
+            WHERE Benefit__c IN :benefitIds
+            AND Family = 'Benefit'
+            AND IsActive = true
+        ];
+
+        Map<Id, Product2> productsByBenefitId =
+            new Map<Id, Product2>();
+
+        for (Product2 product : products) {
+
+            if (productsByBenefitId.containsKey(product.Benefit__c)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'More than one active Product2 was found for Benefit ' +
+                    String.valueOf(product.Benefit__c) + '.'
+                );
+            }
+
+            productsByBenefitId.put(
+                product.Benefit__c,
+                product
+            );
+        }
+
+        for (Benefit__c benefit : benefitsByReference.values()) {
+
+            if (!productsByBenefitId.containsKey(benefit.Id)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'Product2 for benefit ' +
+                    benefit.Visa_External_Reference__c +
+                    ' was not found in the catalogue.'
+                );
+            }
+        }
+
+        Set<Id> productIds = new Set<Id>();
+
+        for (Product2 product : productsByBenefitId.values()) {
+            productIds.add(product.Id);
+        }
+
+        List<PricebookEntry> pricebookEntries = [
+            SELECT
+                Id,
+                Product2Id,
+                UnitPrice,
+                IsActive
+            FROM PricebookEntry
+            WHERE Pricebook2Id = :pricebookId
+            AND Product2Id IN :productIds
+            AND CurrencyIsoCode = :currencyIsoCode
+            AND IsActive = true
+        ];
+
+        Map<Id, PricebookEntry> entriesByProductId =
+            new Map<Id, PricebookEntry>();
+
+        for (PricebookEntry entry : pricebookEntries) {
+
+            if (entriesByProductId.containsKey(entry.Product2Id)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'More than one active PricebookEntry was found for Product2 ' +
+                    entry.Product2Id + '.'
+                );
+            }
+
+            entriesByProductId.put(
+                entry.Product2Id,
+                entry
+            );
+        }
+
+        Map<String, PricebookEntry> result =
+            new Map<String, PricebookEntry>();
+
+        for (String benefitReference : benefitsByReference.keySet()) {
+
+            Benefit__c benefit =
+                benefitsByReference.get(benefitReference);
+
+            Product2 product =
+                productsByBenefitId.get(benefit.Id);
+
+            PricebookEntry entry =
+                entriesByProductId.get(product.Id);
+
+            if (entry == null) {
+                throw new WebportalApiUtility_v1.RequestAPIException(
+                    400,
+                    ERROR_BAD_REQUEST,
+                    'Benefit ' +
+                    benefitReference +
+                    ' is not available in the Benefits Pricebook.'
+                );
+            }
+
+            result.put(
+                benefitReference,
+                entry
+            );
+        }
+
+        return result;
+    }
+
+
+    // ============================================================
+    // SERVICE CONTRACT
+    // ============================================================
+
+    private static ServiceContract buildServiceContract(
+        BenefitPackage request,
+        Product__c product,
+        Id pricebookId,
+        Date effectiveStartDate,
+        Date effectiveEndDate
+    ) {
+
+        ServiceContract contract = new ServiceContract();
+
+        contract.Name = '-';
+
+        contract.RecordTypeId =
+            Schema.SObjectType.ServiceContract
+                .getRecordTypeInfosByDeveloperName()
+                .get(BENEFIT_PACKAGE_RECORD_TYPE)
+                .getRecordTypeId();
+
+        contract.Pricebook2Id = pricebookId;
+        contract.Package_Status__c = PACKAGE_STATUS.get('DRAFT');
+        contract.Product_Reference__c = request.product_reference;
+        contract.Product__c = product.Id;
+        contract.StartDate = effectiveStartDate;
+        contract.EndDate = effectiveEndDate;
+        contract.Term =
+            calculateWholeMonthTerm(
+                effectiveStartDate,
+                effectiveEndDate
+            );
+        contract.Amount_of_Policies__c =
+            request.amount_of_policies;
+
+        if (request.affected_policy_range != null) {
+            contract.Policy_Range_Start__c =
+                request.affected_policy_range.external_number_start_at;
+
+            contract.Policy_Range_End__c =
+                request.affected_policy_range.external_number_end_at;
+        }
+
+        populateLegalConsents(
+            contract,
+            request
+        );
+
+        return contract;
+    }
+
+
+    private static Integer calculateWholeMonthTerm(
+        Date startDate,
+        Date endDate
+    ) {
+
+        Integer months =
+            ((endDate.year() - startDate.year()) * 12) +
+            (endDate.month() - startDate.month());
+
+        if (endDate.day() < startDate.day()) {
+            months--;
+        }
+
+        return Math.max(months, 1);
+    }
+
+
+    private static void populateLegalConsents(
+        ServiceContract contract,
+        BenefitPackage request
+    ) {
+
+        if (
+            request.legal_consents == null ||
+            request.legal_consents.isEmpty()
+        ) {
+            return;
+        }
+
+        LegalConsentItem consent =
+            request.legal_consents[0];
+
+        contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+            contract,
+            'Legal_Consent_Code__c',
+            consent.code,
+            false
+        );
+
+        contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+            contract,
+            'Legal_Consent_Confirmed__c',
+            consent.is_confirmed != null
+                ? consent.is_confirmed
+                : false
+        );
+
+        Datetime consentDateTime = null;
+
+        if (String.isNotBlank(consent.consented_at)) {
+            consentDateTime =
+                parseConsentDate(consent.consented_at);
+        }
+
+        contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+            contract,
+            'Legal_Consent_Date__c',
+            consentDateTime,
+            false
+        );
+    }
+
+
+    private static Datetime parseConsentDate(
+        String consentedAt
+    ) {
+
+        String normalizedDate = consentedAt.trim();
+
+        if (normalizedDate.endsWith('Z')) {
+            normalizedDate =
+                normalizedDate.substring(
+                    0,
+                    normalizedDate.length() - 1
+                );
+        }
+
+        normalizedDate =
+            normalizedDate.replace('T', ' ');
+
+        return Datetime.valueOfGmt(normalizedDate);
+    }
+
+
+    // ============================================================
+    // CONTRACT LINE ITEMS
+    // ============================================================
+
+    private static List<ContractLineItem> buildContractLineItems(
+        Id contractId,
+        BenefitPackage request,
+        Map<String, Benefit__c> benefitsByReference,
+        Map<String, PricebookEntry> pricebookEntriesByBenefit,
+        Date effectiveStartDate,
+        Date effectiveEndDate
+    ) {
+
+        List<ContractLineItem> lineItems =
+            new List<ContractLineItem>();
+
+        for (CoreBenefit coreBenefit : request.core_benefits) {
+
+            lineItems.add(
+                buildContractLineItem(
+                    contractId,
+                    benefitsByReference.get(
+                        coreBenefit.benefit_id
+                    ),
+                    pricebookEntriesByBenefit.get(
+                        coreBenefit.benefit_id
+                    ),
+                    'Core',
+                    request.amount_of_policies,
+                    effectiveStartDate,
+                    effectiveEndDate,
+                    true
+                )
+            );
+        }
+
+        if (request.optional_benefits != null) {
+
+            for (OptionalBenefit optionalBenefit :
+                request.optional_benefits
+            ) {
+
+                lineItems.add(
+                    buildContractLineItem(
+                        contractId,
+                        benefitsByReference.get(
+                            optionalBenefit.benefit_id
+                        ),
+                        pricebookEntriesByBenefit.get(
+                            optionalBenefit.benefit_id
+                        ),
+                        'Optional',
+                        request.amount_of_policies,
+                        effectiveStartDate,
+                        effectiveEndDate,
+                        false
+                    )
+                );
+            }
+        }
+
+        return lineItems;
+    }
+
+
+    private static ContractLineItem buildContractLineItem(
+        Id contractId,
+        Benefit__c benefit,
+        PricebookEntry pricebookEntry,
+        String category,
+        Integer quantity,
+        Date startDate,
+        Date endDate,
+        Boolean zeroPriced
+    ) {
+
+        if (benefit == null) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'Benefit could not be resolved.'
+            );
+        }
+
+        if (pricebookEntry == null) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                'No PricebookEntry was found for benefit ' +
+                benefit.Name +
+                ' in the Visa Benefits Pricebook.'
+            );
+        }
+
+        ContractLineItem lineItem =
+            new ContractLineItem();
+
+        lineItem.ServiceContractId = contractId;
+        lineItem.PricebookEntryId = pricebookEntry.Id;
+        lineItem.Benefit__c = benefit.Id;
+        lineItem.Benefit_Category__c = category;
+        lineItem.Quantity = quantity;
+        lineItem.UnitPrice =
+            zeroPriced
+                ? 0
+                : pricebookEntry.UnitPrice;
+        lineItem.StartDate = startDate;
+        lineItem.EndDate = endDate;
+
+        return lineItem;
+    }
+
+
+    // ============================================================
+    // RESPONSE BUILDERS
+    // ============================================================
+
+    private static List<SimplifiedBenefitPackage>
+    buildBenefitPackageListResponse(
+        List<ServiceContract> contracts
+    ) {
+
+        List<SimplifiedBenefitPackage> response =
+            new List<SimplifiedBenefitPackage>();
+
+        for (ServiceContract contract : contracts) {
+
+            SimplifiedBenefitPackage item =
+                new SimplifiedBenefitPackage();
+
+            item.status = contract.Package_Status__c;
+            item.benefit_package_id = contract.Id;
+            item.product_reference = contract.Product_Reference__c;
+            item.active_start_at = contract.StartDate;
+            item.active_end_at = contract.EndDate;
+
+            item.amount_of_policies =
+                contract.Amount_of_Policies__c == null
+                    ? null
+                    : Integer.valueOf(
+                        contract.Amount_of_Policies__c
+                    );
+
+            response.add(item);
+        }
+
+        return response;
+    }
+
+
+    private static BenefitPackage buildBenefitPackageResponse(
+        ServiceContract contract,
+        List<ContractLineItem> lineItems
+    ) {
+
+        BenefitPackage response =
+            new BenefitPackage();
+
+        response.status = contract.Package_Status__c;
+        response.benefit_package_id = contract.Id;
+        response.product_reference = contract.Product_Reference__c;
+        response.active_start_at = contract.StartDate;
+        response.active_end_at = contract.EndDate;
+
+        response.amount_of_policies =
+            contract.Amount_of_Policies__c == null
+                ? null
+                : Integer.valueOf(
+                    contract.Amount_of_Policies__c
+                );
+
+        response.affected_policy_range =
+            new AffectedPolicyRange();
+
+        response.affected_policy_range.external_number_start_at =
+            contract.Policy_Range_Start__c;
+
+        response.affected_policy_range.external_number_end_at =
+            contract.Policy_Range_End__c;
+
+        response.core_benefits =
+            new List<CoreBenefit>();
+
+        response.optional_benefits =
+            new List<OptionalBenefit>();
+
+        response.legal_consents =
+            buildLegalConsentResponse(contract);
+
+        for (ContractLineItem lineItem : lineItems) {
+
+            if (lineItem.Benefit_Category__c == 'Core') {
+
+                CoreBenefit coreBenefit =
+                    new CoreBenefit();
+
+                coreBenefit.benefit_id =
+                    lineItem.PricebookEntry.Product2
+                        .Benefit__r.Visa_External_Reference__c;
+
+                coreBenefit.name =
+                    lineItem.PricebookEntry.Product2
+                        .Benefit__r.Name;
+
+                response.core_benefits.add(
+                    coreBenefit
+                );
+
+            } else if (
+                lineItem.Benefit_Category__c == 'Optional'
+            ) {
+
+                OptionalBenefit optionalBenefit =
+                    new OptionalBenefit();
+
+                optionalBenefit.benefit_id =
+                    lineItem.PricebookEntry.Product2
+                        .Benefit__r.Visa_External_Reference__c;
+
+                optionalBenefit.name =
+                    lineItem.PricebookEntry.Product2
+                        .Benefit__r.Name;
+
+                optionalBenefit.description =
+                    lineItem.PricebookEntry.Product2
+                        .Benefit__r.Benefit_Description__c;
+
+                response.optional_benefits.add(
+                    optionalBenefit
+                );
+            }
+        }
+
+        return response;
+    }
+
+
+    private static List<LegalConsentItem>
+    buildLegalConsentResponse(
+        ServiceContract contract
+    ) {
+
+        List<LegalConsentItem> legalConsents =
+            new List<LegalConsentItem>();
+
+        if (String.isBlank(contract.Legal_Consent_Code__c)) {
+            return legalConsents;
+        }
+
+        LegalConsentItem consent =
+            new LegalConsentItem();
+
+        consent.code =
+            contract.Legal_Consent_Code__c;
+
+        consent.is_confirmed =
+            contract.Legal_Consent_Confirmed__c;
+
+        consent.consented_at =
+            contract.Legal_Consent_Date__c == null
+                ? null
+                : contract.Legal_Consent_Date__c.formatGmt(
+                    'yyyy-MM-dd\'T\'HH:mm:ss\'Z\''
+                );
+
+        legalConsents.add(consent);
+
+        return legalConsents;
+    }
+
+
+    // ============================================================
+    // REQUEST UTILITIES
+    // ============================================================
+
+    private static String getSanitizedRequestBody() {
+
+        if (
+            RestContext.request == null ||
+            RestContext.request.requestBody == null
+        ) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                MESSAGE_INVALID_REQUEST
+            );
+        }
+
+        String requestBody =
+            RestContext.request.requestBody
+                .toString()
+                .trim();
+
+        if (String.isBlank(requestBody)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                ERROR_BAD_REQUEST,
+                MESSAGE_INVALID_REQUEST
+            );
+        }
+
+        requestBody =
+            WebportalApiUtility_v1.removeXMLInjections(
+                requestBody
+            );
+
+        requestBody =
+            WebportalApiUtility_v1.removeHtmlInjection(
+                requestBody
+            );
+
+        return requestBody;
+    }
+
+
+    private static List<String> getResourceSegments(
+        String resourcePath
+    ) {
+
+        String requestUri =
+            RestContext.request?.requestURI;
+
+        if (
+            String.isBlank(requestUri) ||
+            String.isBlank(resourcePath)
+        ) {
+            return new List<String>();
+        }
+
+        requestUri =
+            requestUri.split('\\?')[0];
+
+        String suffix =
+            requestUri.substringAfter(resourcePath);
+
+        if (
+            String.isBlank(suffix) ||
+            suffix == '/'
+        ) {
+            return new List<String>();
+        }
+
+        if (!suffix.startsWith('/')) {
+            return new List<String>();
+        }
+
+        List<String> segments =
+            new List<String>();
+
+        for (String segment :
+            suffix.split('/')
+        ) {
+
+            if (String.isNotBlank(segment)) {
+                segments.add(segment);
+            }
+        }
+
+        return segments;
+    }
+
+
+    // ============================================================
+    // ERROR HANDLING
+    // ============================================================
+
+    private static void writeErrorResponse(
+        Integer statusCode,
+        String error,
+        String description
+    ) {
+
+        RestContext.response.statusCode =
+            statusCode;
+
+        RestContext.response.responseBody =
+            Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(statusCode),
+                        error,
+                        description
+                    )
+                )
+            );
+    }
+
+
+    private static void writeInternalServerError(
+        String message,
+        Exception ex
+    ) {
+
+        System.debug(
+            LoggingLevel.ERROR,
+            'Exception type: ' +
+            ex.getTypeName()
+        );
+
+        System.debug(
+            LoggingLevel.ERROR,
+            'Exception message: ' +
+            ex.getMessage()
+        );
+
+        System.debug(
+            LoggingLevel.ERROR,
+            'Exception stack trace: ' +
+            ex.getStackTraceString()
+        );
+
+        writeErrorResponse(
+            500,
+            ERROR_INTERNAL_SERVER,
+            message
+        );
+    }
+
+
+    // ============================================================
+    // DTOs
+    // ============================================================
+
+    public class SimplifiedBenefitPackage {
+        public String status;
+        public String benefit_package_id;
+        public String product_reference;
+        public Date active_start_at;
+        public Date active_end_at;
+        public Integer amount_of_policies;
+    }
+
+
+    public class BenefitPackage {
+        public String status;
+        public String benefit_package_id;
+        public String product_reference;
+        public Date active_start_at;
+        public Date active_end_at;
+        public Integer amount_of_policies;
+        public AffectedPolicyRange affected_policy_range;
+        public List<CoreBenefit> core_benefits;
+        public List<OptionalBenefit> optional_benefits;
+        public List<LegalConsentItem> legal_consents;
+    }
+
+
+    public class AffectedPolicyRange {
+        public String external_number_start_at;
+        public String external_number_end_at;
+    }
+
+
+    public class CoreBenefit {
+        public String benefit_id;
+        public String name;
+    }
+
+
+    public class OptionalBenefit {
+        public String benefit_id;
+        public String name;
+        public String description;
+    }
+
+
+    public class LegalConsentItem {
+        public String code;
+        public Boolean is_confirmed;
+        public String consented_at;
+    }
+
+
+    public class BenefitPackagePostResponse {
+        public String benefit_package_id;
+    }
+
+
+    private class DateRange {
+        public Date startDate;
+        public Date endDate;
+    }
+}
