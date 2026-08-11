@@ -1,89 +1,75 @@
-   @IsTest
-    static void testSuccessGetBenefitPackageDetails() {
+@IsTest
+static void testSuccessGetBenefitPackageDetails() {
+    ServiceContract benefitPackage = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = 'Benefit_Package'
+        LIMIT 1
+    ];
 
-        ServiceContract benefitPackage = [
-            SELECT Id
-            FROM ServiceContract
-            WHERE RecordType.DeveloperName = 'Benefit_Package'
-            LIMIT 1
-        ];
+    RestContext.request = new RestRequest();
+    RestContext.request.requestURI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
+        + benefitPackage.Id;
+    RestContext.request.httpMethod = 'GET';
+    RestContext.request.headers.put(
+        'authorization2',
+        'Bearer ' + TOKEN
+    );
 
-        RestContext.request = new RestRequest();
-        RestContext.request.requestURI =
-            '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/'
-            + benefitPackage.Id;
-        RestContext.request.httpMethod = 'GET';
-        RestContext.request.headers.put(
-            'authorization2',
-            'Bearer ' + TOKEN
+    RestContext.response = new RestResponse();
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doGet();
+    Test.stopTest();
+
+    System.assertEquals(200, RestContext.response.statusCode, 'Expected the details endpoint to return HTTP 200.');
+
+    BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
+        (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
         );
 
-        RestContext.response = new RestResponse();
+    System.assertEquals(benefitPackage.Id, response.benefit_package_id, 'The response should expose the benefit package id.');
+    System.assertEquals('Draft', response.status, 'The response should expose the package status.');
+    System.assertEquals('I_C_BR', response.product_reference, 'The response should expose the product reference.');
+    System.assertEquals(100, response.amount_of_policies, 'The response should expose the amount of policies.');
 
-        Test.startTest();
-        BenefitsConfigAPIPackages_VEXP.doGet();
-        Test.stopTest();
+    System.assertNotEquals(
+        null,
+        response.affected_policy_range,
+        'The response should include the affected policy range.'
+    );
 
-        System.assertEquals(
-            200,
-            RestContext.response.statusCode,
-            'Expected the details endpoint to return HTTP 200.'
-        );
+    System.assertEquals('1000', response.affected_policy_range.external_number_start_at, 'The response should include the policy range start.');
+    System.assertEquals('1100', response.affected_policy_range.external_number_end_at, 'The response should include the policy range end.');
 
-        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
-            (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
-                RestContext.response.responseBody.toString(),
-                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
-            );
+    System.assertEquals(1, response.core_benefits.size(), 'The response should include one core benefit.');
+    System.assertEquals('CORE-001', response.core_benefits[0].benefit_id, 'The core benefit id should come from Visa_External_Reference__c.');
+    System.assertEquals('Core Benefit', response.core_benefits[0].name, 'The core benefit name should come from Benefit__c.Name.');
 
-        System.assertEquals(
-            benefitPackage.Id,
-            response.benefit_package_id,
-            'The response should expose the benefit package id.'
-        );
+    System.assertEquals(1, response.optional_benefits.size(), 'The response should include one optional benefit.');
+    System.assertEquals('OPT-001', response.optional_benefits[0].benefit_id, 'The optional benefit id should come from Visa_External_Reference__c.');
+    System.assertEquals('Optional Benefit', response.optional_benefits[0].name, 'The optional benefit name should come from Benefit__c.Name.');
+    System.assertEquals('Optional benefit description', response.optional_benefits[0].description, 'The optional benefit description should be returned.');
 
-        System.assertEquals(
-            'Draft',
-            response.status,
-            'The response should expose the package status.'
-        );
+    System.assertEquals(1, response.legal_consents.size(), 'The response should include one legal consent.');
+    System.assertEquals('legal_consent_I_understand', response.legal_consents[0].code, 'The legal consent code should match the package data.');
+    System.assertEquals(true, response.legal_consents[0].is_confirmed, 'The legal consent confirmation should match the package data.');
 
-        System.assertEquals(
-            'I_C_BR',
-            response.product_reference,
-            'The response should expose the product reference.'
-        );
+    System.assertNotEquals(
+        null,
+        response.legal_consents[0].consented_at,
+        'The response should include the consent date.'
+    );
+}
 
-        System.assertEquals(
-            100,
-            response.amount_of_policies,
-            'The response should expose the amount of policies.'
-        );
 
-        System.assertNotEquals(
-            null,
-            response.affected_policy_range,
-            'The response should include the affected policy range.'
-        );
 
-        System.assertEquals(
-            '1000',
-            response.affected_policy_range.external_number_start_at,
-            'The response should include the policy range start.'
-        );
 
-        System.assertEquals(
-            '1100',
-            response.affected_policy_range.external_number_end_at,
-            'The response should include the policy range end.'
-        );
 
-        System.assertEquals(
-            1,
-            response.core_benefits.size(),
-            'The response should include one core benefit.'
-        );
-
+================
         System.assertEquals(
             'CORE-001',
             response.core_benefits[0].benefit_id,
