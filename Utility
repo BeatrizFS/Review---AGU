@@ -1,0 +1,241 @@
+    public static void runValidateRequiredFields(String requestBody, Map<String, String> requiredFields) {
+        String errorMessage = WebportalApiUtility_v1.validateRequestRequiredFields(requestBody, requiredFields);
+        if (errorMessage != '') {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'Bad Request', 'Invalid request body. Mandatory field: ' + errorMessage);
+        }
+    }
+
+    public static String validateRequestRequiredFields(String jsonBody, Map<String, String> requiredFields) {
+        String propertyName = '';
+        String propertyOneOf = '';
+        Map<String,Object> level = (Map<String,Object>) JSON.deserializeUntyped(jsonBody);
+
+        for(String requiredField : requiredFields.keySet()) {
+            propertyName = validateRequestRequiredFields(level, new Map<String, String>{requiredField => requiredFields.get(requiredField)}, '');
+
+            if(propertyName != '') {
+                propertyName = requiredField;
+                if (requiredFields.get(requiredField).contains('OneOf-First')) {
+                    propertyOneOf = requiredField;
+                    continue;
+                } else if (requiredFields.get(requiredField).contains('OneOf-Last')) {
+                    if (propertyOneOf == '') {
+                        propertyName = '';
+                        continue;
+                    }
+                    if (propertyOneOf != '' && jsonBody.contains(propertyOneOf.substringAfter('.'))) {
+                        propertyName = propertyOneOf;
+                    }
+                    break;
+                } else {
+                    break;
+                }
+            }
+        }
+        return propertyName;
+    }
+
+    private static String validateRequestRequiredFields(Map<String,Object> level, Map<String, String> requiredFields, String propertyName) {
+        for(String requiredField : requiredFields.keySet()) {
+            if(String.isNotBlank(requiredField)) {
+                List<String> requiredFieldSplit = requiredField.split('\\.');
+            
+                Boolean isListObject = false;
+                List<Object> listObject;
+
+                if(level.get(requiredFieldSplit[0]) != null) {
+                    try {
+                        listObject = (List<Object>) level.get(requiredFieldSplit[0]);
+                        isListObject = true;
+                    } catch (Exception ex) {
+                        System.debug('Required property {' + requiredFieldSplit[0] + '} is not a list of objects');
+                    }
+                }
+
+                if(requiredFieldSplit.size() == 1) {
+                    String propertyCategory = requiredFields.get(requiredField);
+                    if (requiredFields.get(requiredField).contains('OneOf-')) {
+                        propertyCategory = requiredFields.get(requiredField).substringAfterLast('-');
+                    }
+
+                    if(propertyCategory == 'Primitive') {
+                        if (level.get(requiredField) == null || String.isBlank(level.get(requiredField).toString())) {
+                            propertyName = requiredField;
+                            break;
+                        }
+                    } else if(propertyCategory == 'Object') {
+                        if (level.get(requiredField) == null || level.get(requiredField).toString() == '{}') {
+                            propertyName = requiredField;
+                            break;
+                        }
+                    } else if(propertyCategory == 'List') {
+                        if (level.get(requiredField) == null || level.get(requiredField).toString() == '()') {
+                            propertyName = requiredField;
+                            break;
+                        }
+                    }
+                } else if(isListObject) {
+                    for(Object nextLevel : listObject) {
+                        propertyName = validateRequestRequiredFields((Map<String,Object>) nextLevel, new Map<String, String>{requiredField.replace(requiredFieldSplit[0] + '.', '') => requiredFields.get(requiredField)}, propertyName);
+                        if(propertyName != '') {
+                            break;
+                        }
+                    }
+                } else {
+                    if(level.get(requiredFieldSplit[0]) != null) {
+                        propertyName = validateRequestRequiredFields((Map<String,Object>) level.get(requiredFieldSplit[0]), new Map<String, String>{requiredField.replace(requiredFieldSplit[0] + '.', '') => requiredFields.get(requiredField)}, propertyName);
+                        if(propertyName != '') {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        
+        return propertyName;
+    }
+
+    public static String validateRequestTypedFields(String jsonBody, Map<String, String> requiredFields) {
+        String propertyName = '';
+        String propertyOneOf = '';
+        Map<String,Object> level = (Map<String,Object>) JSON.deserializeUntyped(jsonBody);
+
+        for(String requiredField : requiredFields.keySet()) {
+            propertyName = validateRequestTypedFieldsAuxiliar(level, new Map<String, String>{requiredField => requiredFields.get(requiredField)}, '');
+
+            if(propertyName != '') {
+                propertyName = requiredField;
+                break;
+            }
+        }
+        return propertyName;
+    }
+
+    private static String validateRequestTypedFieldsAuxiliar(Map<String,Object> level, Map<String, String> requiredFields, String propertyName) {
+        for(String requiredField : requiredFields.keySet()) {
+            if(String.isNotBlank(requiredField)) {
+                List<String> requiredFieldSplit = requiredField.split('\\.');
+                Boolean isListObject = false;
+                List<Object> listObject;
+
+                if(level.get(requiredFieldSplit[0]) != null) {
+                    try {
+                        listObject = (List<Object>) level.get(requiredFieldSplit[0]);
+                        isListObject = true;
+                    } catch (Exception ex) {
+                        System.debug('Required property {' + requiredFieldSplit[0] + '} is not a list of objects');
+                    }
+                }
+
+                if(requiredFieldSplit.size() == 1) {
+                    String propertyType = requiredFields.get(requiredField);
+                    if (level.get(requiredField) != null && String.isNotBlank(level.get(requiredField).toString())) {
+                        if (propertyType == 'Boolean') {
+                            if (!(level.get(requiredField) instanceOf Boolean)) {
+                                propertyName = requiredField;
+                                break;
+                            }
+                        }
+                    }
+                } else if(isListObject) {
+                    for(Object nextLevel : listObject) {
+                        propertyName = validateRequestTypedFieldsAuxiliar((Map<String,Object>) nextLevel, new Map<String, String>{requiredField.replace(requiredFieldSplit[0] + '.', '') => requiredFields.get(requiredField)}, propertyName);
+                        if(propertyName != '') {
+                            break;
+                        }
+                    }
+                } else {
+                    if(level.get(requiredFieldSplit[0]) != null) {
+                        propertyName = validateRequestTypedFieldsAuxiliar((Map<String,Object>) level.get(requiredFieldSplit[0]), new Map<String, String>{requiredField.replace(requiredFieldSplit[0] + '.', '') => requiredFields.get(requiredField)}, propertyName);
+                        if(propertyName != '') {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        
+        return propertyName;
+    }
+
+    public static String validateJSONRequiredFields( String jsonBody, Set<String> requiredFields ) {
+        String message = '';
+        Map<String,Object> level = (Map<String,Object>) JSON.deserializeUntyped( jsonBody );
+        for( String requiredField : requiredFields ) {
+            message = validateJSONRequiredFields( level, new Set<String> {requiredField}, '' );
+            if( message != '' ) {
+                message = requiredField;
+                break;
+            }
+        }
+        return message;
+    }
+
+    private static String validateJSONRequiredFields( Map<String,Object> level, Set<String> requiredFields, String message ) {
+        System.debug( 'Required Fields >>> ' + requiredFields );
+        for( String requiredField : requiredFields ) {
+            System.debug('Required Field >>> ' + requiredField );
+            if( String.isNotBlank(requiredField) ) {
+                List<String> requiredFieldSplit = requiredField.split('\\.');
+                System.debug(requiredFieldSplit);
+                Boolean isListObject = false;
+                List<Object> listObject;
+                if( level.get( requiredFieldSplit[0] ) != null ) {
+                    try {
+                        listObject = (List<Object>)  level.get( requiredFieldSplit[0] );
+                        isListObject = true;
+                    } catch (Exception e) {}
+                }
+
+                System.debug( 'Current JSON Level >>> ' + level );
+                System.debug( 'Required Field >>> ' + requiredFieldSplit );
+                if( requiredFieldSplit.size() == 1 ) {
+                    System.debug( 'Field Value >>> ' + level.get( requiredFieldSplit[0] ) );
+                    if( !level.containsKey( requiredFieldSplit[0] ) || level.get( requiredFieldSplit[0] ) == null ) {
+                        message = requiredFieldSplit[0];
+                        break;
+                    } 
+                } else if( isListObject ) {
+                    Set<String> requiredFieldSplitWithoutFirstElement = new Set<String>();
+                    requiredFieldSplitWithoutFirstElement.addAll( requiredFields );
+                    requiredFieldSplitWithoutFirstElement.remove( requiredFieldSplit[0] );
+                    for( Object nextLevel : listObject ) {
+                        message = validateJSONRequiredFields( (Map<String,Object>) nextLevel, new Set<String> { requiredField.replace( requiredFieldSplit[0] + '.', '' ) }, message );
+                        if( message != '' ) {
+                            break;
+                        }
+                    }
+                } else {
+                    if( level.containsKey( requiredFieldSplit[0] ) && level.get( requiredFieldSplit[0] ) != null ) {                    
+                        System.debug( 'Next Fields >>> ' + requiredField.replace( requiredFieldSplit[0] + '.', '' ) );
+                        message = validateJSONRequiredFields( (Map<String,Object>) level.get( requiredFieldSplit[0] ), new Set<String> { requiredField.replace( requiredFieldSplit[0] + '.', '' ) }, message );
+                    } else {
+                        message = requiredFieldSplit[0];
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        return message;
+    }
+
+    public static SObject setSObjectField(SObject theObject, String fieldName, Object value) {
+        return setSObjectField(theObject, fieldName, value, true);
+    }
+
+    public static SObject setSObjectField(SObject theObject, String fieldName, Object value, Boolean ignoreRequest) {
+        if(value != null || !ignoreRequest) {
+            System.debug('FIELD NAME >>> ' + fieldName );
+            System.debug('FIELD VALUE >>> ' + value );
+            theObject.put(fieldName, value);
+        } 
+
+        return theObject;
+    }
