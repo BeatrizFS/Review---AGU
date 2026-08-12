@@ -1,0 +1,90 @@
+/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}/complete
+Allow the consumer to validate that he has finished to fill the benefit package and that it is ready to await its active_start_at date.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+benefit_package_id *
+string
+(path)
+Identifier of the benefit package.
+
+b09aac28-7f63
+Responses
+Code	Description	Links
+204	
+Benefit package completed successfully (No content returned).
+
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+404	
+Not found. The server did not find a current representation for the searched resource.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "404",
+  "error": "Not Found",
+  "error_description": "The searched resource was not found."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
