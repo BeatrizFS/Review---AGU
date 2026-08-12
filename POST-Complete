@@ -1,185 +1,75 @@
-/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}/complete
-Allow the consumer to validate that he has finished to fill the benefit package and that it is ready to await its active_start_at date.
+| `benefit_packages/{benefit_package_id}/complete` | `POST` | Submit a package and let it await its start date. |
+```apex
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class BenefitsConfigAPIPackages_VEXP extends BenefitsConfigAPIBase_V1 {
 
-Jump to definition
-Cf. summary
+    private static final String RESOURCE_PATH = '/benefit_packages';
+    private static final String ACTION_CANCEL = 'cancel';
+    private static final String ACTION_COMPLETE = 'complete';
 
-Parameters
-Try it out
-Name	Description
-benefit_package_id *
-string
-(path)
-Identifier of the benefit package.
-
-b09aac28-7f63
-Responses
-Code	Description	Links
-204	
-Benefit package completed successfully (No content returned).
-
-No links
-400	
-Bad Request.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "400",
-  "error": "Bad Request",
-  "error_description": "The input information received were not compliant with the endpoint specification."
-}
-No links
-401	
-Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "401",
-  "error": "Unauthorized",
-  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
-}
-No links
-403	
-Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "403",
-  "error": "Forbidden",
-  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
-}
-No links
-404	
-Not found. The server did not find a current representation for the searched resource.
-
-Media type
-
-application/json
-Example Value
-Schema
-{
-  "status_code": "404",
-  "error": "Not Found",
-  "error_description": "The searched resource was not found."
-}
-No links
-default	
-Default response format.
-
-Media type
-
-application/json
-Controls Accept header.
-Example Value
-Schema
-{
-  "status_code": "500",
-  "error": "Internal Server Error"
-}
-
-### 12. POST `/cancel` and POST `/complete`
-
-Both respond `204` with no body and both take no request body, so neither runs the decryption
-step; only the response of an error is encrypted-free JSON, per the error contract.
-
-| Operation | Allowed from | Effect |
-|---|---|---|
-| `/cancel` | `Draft`, `Awaiting Start`, `Active` | `Package_Status__c = 'Cancelled'`, `Cancelled_At__c = now`, `Cancelled_By__c = context.agentContactId` |
-| `/complete` | `Draft` only | Validates completeness, then `Package_Status__c = 'Awaiting Start'`, `Completed_At__c = now`. Does **not** record agreement acceptance and does **not** require a signed agreement — the signature gates activation, not completion |
-
-`/complete` is where the contract's structural requirements are finally enforced, because a draft
-is legitimately incomplete: at least one `Core` line, `Product_Reference__c` present,
-`Amount_of_Policies__c` at least 1, both dates present with `EndDate > StartDate`, the account
-range present, and the BIN present, approved and owned by the caller's bank. Each failure yields
-`400 bad_request` naming the missing element.
-
-Neither operation is idempotent by the contract, which offers no `409`. Re-invoking `/cancel` on an
-already-cancelled package returns `400 bad_request` stating the current status, and the same for
-`/complete` outside `Draft`. This is deliberate: silently returning `204` for a no-op would hide a
-consumer defect, and the terminal states of the model forbid the transition anyway.
-
-```mermaid
-sequenceDiagram
-    participant GW as API gateway
-    participant R as BenefitsConfigAPIPackages_VEXP
-    participant B as BenefitsConfigAPIBase_V1
-    participant D as ServiceContract
-    GW->>R: POST /benefit_packages/{id}/complete
-    R->>R: dispatch on URI segments
-    R->>B: authorizeAgent(write scope)
-    B-->>R: AgentContext
-    R->>D: SELECT ... WHERE Id = :id AND AccountId = :bank (1 SOQL)
-    alt not found or other bank
-        R-->>GW: 404 not_found
-    else status is not Draft
-        R-->>GW: 400 bad_request (current status)
-    else incomplete
-        R-->>GW: 400 bad_request (missing element)
-    else
-        R->>D: update Package_Status__c = 'Awaiting Start' (as user)
-        R-->>GW: 204
-    end
-
-| Operation | SOQL | DML | JWE operations |
-|---|---|---|---|
-| POST create | 4 (agent, product, benefits, price entries) | 2 | 1 decrypt + 1 encrypt |
-| GET list | 2 (agent, packages) | 0 | 1 encrypt |
-| GET detail | 3 (agent, header, lines) | 0 | 1 encrypt |
-| PATCH | 4 | 3 (update, delete lines, insert lines) | 1 decrypt + 1 encrypt |
-| cancel / complete | 2–3 | 1 | 1 encrypt |
-| GET products | 3 | 0 | 1 encrypt |
-| GET bank / agent | 2 | 0 | 1 encrypt |
-
-Além dos exemplos discutidos outros exemplos
-@RestResource(urlMapping = '/specific/visagateway/claim_management/vexp/smart_contracts/*/complete/*')
-global with sharing class WebportalSmartContractClaimComplAPI_VEXP extends WebportalAPIBase_v1 {
     @HttpPost
-    global static void postHandler() {
-        new WebportalSmartContractClaimComplAPI_VEXP().doPost();
-    }
-
-    public override void doPost() {
-        try {
-            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData;
-
-            accessTokenData = WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(RestContext.Request, new Set<String> {'urn:axa.partners.specific.visagateway.claim_management.smart_contracts.write'});
-            WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig = WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
-
-            Account existingCustomer = WebportalApiUtility_v1.getUserByCustomerId(accessTokenData.customData.cn);
-            if(existingCustomer == null) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not found', 'Resource not found: Customer');
-            }
-
-            String tripId = RestContext.request.requestURI.substringBetween('/smart_contracts/','/complete');
-            Trip_Assistance__c tripAssistance = [SELECT Id, Status__c FROM Trip_Assistance__c WHERE Id =: tripId AND Type__c = 'CLAIM' AND Account__c =: existingCustomer.Id]??null;
-            if (tripAssistance == null) {
-                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not found', 'Resource not found: smart_contract');
-            }
-
-            tripAssistance.Status__c = 'PROCESSING_ELIGIBILITY';
-            update tripAssistance;
-
-            RestContext.response.statuscode = 204;
-        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
-            RestContext.response.statuscode = ex.status_code;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error, ex.error_description)));
-        } catch(Exception ex) {
-            System.debug(Logginglevel.ERROR, 'Unexpected error creating the request: ' + ex.getMessage());
-            System.debug(Logginglevel.ERROR, 'Error Line: ' + ex.getLineNumber());
-            RestContext.response.statuscode = 500;
-            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500', 'Internal Server Error', 'Unexpected error creating the request: ' + ex.getMessage())));
+    global static void doPost() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+        if (segments.isEmpty()) {
+            handleCreate();
+        } else if (segments.size() == 2 && segments[1] == ACTION_CANCEL) {
+            handleCancel(segments[0]);
+        } else if (segments.size() == 2 && segments[1] == ACTION_COMPLETE) {
+            handleComplete(segments[0]);
+        } else {
+            writeError(404, 'not_found', 'Unknown resource path');
         }
     }
+
+stateDiagram-v2
+    [*] --> Draft: POST /benefit_packages
+    Draft --> Draft: PATCH
+    Draft --> Awaiting_Start: POST /complete
+    Draft --> Cancelled: POST /cancel
+    Awaiting_Start --> Active: batch, StartDate reached
+    Awaiting_Start --> Cancelled: POST /cancel
+    Active --> Expired: batch, EndDate passed
+    Active --> Cancelled: POST /cancel
+    Cancelled --> [*]
+    Expired --> [*]
+
+**Activation is gated on the signed agreement.** A package whose start date arrived without
+`Agreement_Envelope_Status__c = 'completed'` stays in `Awaiting Start` and is stamped with a hold
+reason, so the state is explainable without reading a log; the hold reason is written once and not
+rewritten on every daily pass, which keeps the batch from updating rows it cannot advance. Expiry is
+**not** gated — an unsigned package still expires on its end date rather than lingering. The gate
+lives here and not in `POST /complete` for the reason given in decision 12 of
+`20260725-AXA-ADR-VOBP-architecture-of-agreement-signature-backend.md`: blocking completion would
+strand a finished configuration behind a counterparty's signature.
+
+A formula field was discarded: a derived status emits no change event, cannot be overridden for
+an operational correction, and cannot be filtered against efficiently at scale, since formula
+fields referencing `TODAY()` are not indexable. A scheduled Flow was discarded for volume — the
+promotion sweeps the entire active package base daily, which belongs in a batch with a
+`QueryLocator`.
+
+
+### 12. Validation and the editability window
+
+| Rule | Enforcement | Rationale |
+|---|---|---|
+| `EndDate > StartDate` | Validation rule `Benefit_Package_Date_Order` | Data integrity independent of the channel. |
+| `Amount_of_Policies__c >= 1` | Validation rule `Benefit_Package_Policy_Volume` | Matches `minimum: 1` in the contract. |
+| `Policy_Range_Start__c <= Policy_Range_End__c` (numeric comparison) | Validation rule `Benefit_Package_Range_Order` | Both are Text(10) holding digits; the rule casts with `VALUE()`. |
+| `Bank_Identification_Number__c` populated | Required lookup, plus validation rule `Benefit_Package_BIN_Required` | The backend requires the BIN to exist. The rule covers records created outside the API, where a required lookup alone is bypassable by some tooling. |
+| BIN belongs to the package's bank and is approved | Apex, on create and on `/complete` | A required lookup guarantees presence, not ownership; the bank predicate is enforced in code. |
+| At least one `Core` line | Apex, on `/complete` | The contract requires `core_benefits` with `minItems: 1`, but only a completed package must satisfy it — a draft is legitimately incomplete. |
+| Mutation only while `Draft` | Apex, in the PATCH handler | Returns a precise contract error; see the endpoints document. |
+| Terminal states immutable | Trigger handler | Rejects any field change on `Cancelled` / `Expired` records. |
+
+Every validation rule carries a bypass on the custom permission
+**`Bypass_Benefit_Package_Validation`**, granted to no persona by default and used only for
+data remediation.
+
+`StartDate` in the past is **not** rejected. The contract states that a past
+`active_start_at` is coerced to today; the coercion happens in Apex on write, before the
+validation rules run.
+
+
 }
