@@ -1,3 +1,1339 @@
+@isTest
+public class Test_BenefitsConfigAPIPackages_VEXP {
+
+    private static String token = 'REPLACE_WITH_VALID_TEST_TOKEN';
+
+    private static final String BASE_URI =
+        '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+
+    private static final String BENEFIT_PACKAGE_RECORD_TYPE = 'Benefit_Package';
+
+    private static final String requestBody =
+        '{' +
+            '"product_reference":"I_C_BR",' +
+            '"active_start_at":"2026-09-01",' +
+            '"active_end_at":"2027-09-01",' +
+            '"amount_of_policies":100,' +
+            '"affected_policy_range":{' +
+                '"external_number_start_at":"1000",' +
+                '"external_number_end_at":"1100"' +
+            '},' +
+            '"core_benefits":[{' +
+                '"benefit_id":"LACIEMS",' +
+                '"name":"(EMC) Emergency Medical Assistance"' +
+            '}],' +
+            '"optional_benefits":[{' +
+                '"benefit_id":"LACCELPRO",' +
+                '"name":"Cellphone Protection"' +
+            '}],' +
+            '"legal_consents":[{' +
+                '"code":"legal_consent_I_understand",' +
+                '"is_confirmed":true,' +
+                '"consented_at":"2026-08-11T10:30:45Z"' +
+            '}]' +
+        '}';
+
+    @TestSetup
+    static void initialize() {
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = '(EMC) Emergency Medical Assistance',
+            Visa_External_Reference__c = 'LACIEMS',
+            External_Reference__c = 'EMC_Emergency_Medical_Assistance'
+        );
+
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Cellphone Protection',
+            Visa_External_Reference__c = 'LACCELPRO',
+            External_Reference__c = 'Cellphone_Protection',
+            Benefit_Description__c = 'Optional benefit description'
+        );
+
+        insert new List<Benefit__c>{coreBenefit, optionalBenefit};
+
+        Pricebook2 benefitsPricebook = new Pricebook2(
+            Name = 'Visa Benefits',
+            IsActive = true
+        );
+        insert benefitsPricebook;
+
+        Product__c visaProduct = new Product__c(
+            Name = 'Visa Classic',
+            Type__c = 'C - Credit',
+            Country__c = 'BRAZIL',
+            Category__c = 'Consumer'
+        );
+        insert visaProduct;
+
+        Product2 coreProduct = new Product2(
+            Name = '(EMC) Emergency Medical Assistance',
+            Benefit__c = coreBenefit.Id,
+            Family = 'Benefit',
+            IsActive = true
+        );
+
+        Product2 optionalProduct = new Product2(
+            Name = 'Cellphone Protection',
+            Benefit__c = optionalBenefit.Id,
+            Family = 'Benefit',
+            IsActive = true
+        );
+
+        insert new List<Product2>{coreProduct, optionalProduct};
+
+        insert new List<PricebookEntry>{
+            new PricebookEntry(
+                Pricebook2Id = Test.getStandardPricebookId(),
+                Product2Id = coreProduct.Id,
+                UnitPrice = 1020,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = Test.getStandardPricebookId(),
+                Product2Id = optionalProduct.Id,
+                UnitPrice = 1020,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = coreProduct.Id,
+                UnitPrice = 10,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = optionalProduct.Id,
+                UnitPrice = 50,
+                IsActive = true
+            )
+        };
+
+        Country__c brazil = new Country__c(
+            Name = 'BRAZIL',
+            Code__c = 'BR'
+        );
+        insert brazil;
+
+        Product2 visaClassicProduct2 = new Product2(
+            Name = 'Visa Classic',
+            Card_Product_Id__c = 'I',
+            Card_Type_Code__c = 'C',
+            IsActive = true
+        );
+        insert visaClassicProduct2;
+
+        insert new Product__c(
+            Name = 'Visa Classic',
+            Type__c = 'C - Credit',
+            Country__c = 'BRAZIL',
+            Category__c = 'Consumer',
+            Product__c = visaClassicProduct2.Id,
+            Country_LKP__c = brazil.Id
+        );
+
+        Id benefitPackageRecordTypeId =
+            Schema.SObjectType.ServiceContract
+                .getRecordTypeInfosByDeveloperName()
+                .get(BENEFIT_PACKAGE_RECORD_TYPE)
+                .getRecordTypeId();
+
+        ServiceContract benefitPackage = new ServiceContract(
+            RecordTypeId = benefitPackageRecordTypeId,
+            Name = 'Benefit Package Test',
+            StartDate = Date.today(),
+            EndDate = Date.today().addYears(1),
+            Pricebook2Id = benefitsPricebook.Id,
+            Product_Reference__c = 'I_C_BR',
+            Package_Status__c = 'Draft',
+            Amount_of_Policies__c = 100,
+            Policy_Range_Start__c = '1000',
+            Policy_Range_End__c = '1100',
+            Legal_Consent_Code__c = 'legal_consent_I_understand',
+            Legal_Consent_Confirmed__c = true,
+            Legal_Consent_Date__c =
+                Datetime.newInstanceGmt(
+                    Date.today(),
+                    Time.newInstance(10, 0, 0, 0)
+                )
+        );
+
+        insert benefitPackage;
+
+        List<PricebookEntry> pricebookEntries = [
+            SELECT Id, Product2Id
+            FROM PricebookEntry
+            WHERE Pricebook2Id = :benefitsPricebook.Id
+            AND Product2Id IN :new Set<Id>{coreProduct.Id, optionalProduct.Id}
+            AND IsActive = true
+        ];
+
+        Map<Id, Id> pricebookEntryByProduct = new Map<Id, Id>();
+
+        for (PricebookEntry entry : pricebookEntries) {
+            pricebookEntryByProduct.put(entry.Product2Id, entry.Id);
+        }
+
+        insert new List<ContractLineItem>{
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                PricebookEntryId = pricebookEntryByProduct.get(coreProduct.Id),
+                Benefit_Category__c = 'Core',
+                Quantity = 1,
+                UnitPrice = 0
+            ),
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                PricebookEntryId = pricebookEntryByProduct.get(optionalProduct.Id),
+                Benefit_Category__c = 'Optional',
+                Quantity = 1,
+                UnitPrice = 50
+            )
+        };
+    }
+
+    // ============================================================
+    // GET - SUCCESS
+    // ============================================================
+
+    @isTest
+    static void getBenefitPackages() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'GET';
+        req.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(200, RestContext.response.statuscode);
+
+        List<Object> response =
+            (List<Object>) JSON.deserializeUntyped(
+                RestContext.response.responseBody.toString()
+            );
+
+        System.assertEquals(1, response.size());
+
+        Map<String, Object> item = (Map<String, Object>) response[0];
+
+        System.assertEquals('Draft', item.get('status'));
+        System.assertEquals('I_C_BR', item.get('product_reference'));
+        System.assertEquals(
+            '100',
+            String.valueOf(item.get('amount_of_policies'))
+        );
+    }
+
+    @isTest
+    static void getBenefitPackageDetails() {
+        ServiceContract contract = [
+            SELECT Id
+            FROM ServiceContract
+            WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI + '/' + contract.Id;
+        req.httpMethod = 'GET';
+        req.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(200, RestContext.response.statuscode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
+            );
+
+        System.assertEquals(contract.Id, response.benefit_package_id);
+        System.assertEquals('Draft', response.status);
+        System.assertEquals('I_C_BR', response.product_reference);
+        System.assertEquals(100, response.amount_of_policies);
+
+        System.assertNotEquals(null, response.affected_policy_range);
+        System.assertEquals(
+            '1000',
+            response.affected_policy_range.external_number_start_at
+        );
+        System.assertEquals(
+            '1100',
+            response.affected_policy_range.external_number_end_at
+        );
+
+        System.assertEquals(1, response.core_benefits.size());
+        System.assertEquals(
+            'LACIEMS',
+            response.core_benefits[0].benefit_id
+        );
+        System.assertEquals(
+            '(EMC) Emergency Medical Assistance',
+            response.core_benefits[0].name
+        );
+
+        System.assertEquals(1, response.optional_benefits.size());
+        System.assertEquals(
+            'LACCELPRO',
+            response.optional_benefits[0].benefit_id
+        );
+        System.assertEquals(
+            'Cellphone Protection',
+            response.optional_benefits[0].name
+        );
+        System.assertEquals(
+            'Optional benefit description',
+            response.optional_benefits[0].description
+        );
+
+        System.assertEquals(1, response.legal_consents.size());
+        System.assertEquals(
+            'legal_consent_I_understand',
+            response.legal_consents[0].code
+        );
+        System.assertEquals(
+            true,
+            response.legal_consents[0].is_confirmed
+        );
+        System.assertNotEquals(
+            null,
+            response.legal_consents[0].consented_at
+        );
+    }
+
+    // ============================================================
+    // GET - FAIL
+    // ============================================================
+
+    @isTest
+    static void getBenefitPackagesUnauthorized() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'GET';
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(401, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void getBenefitPackageDetailsUnauthorized() {
+        ServiceContract contract = [
+            SELECT Id
+            FROM ServiceContract
+            WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI + '/' + contract.Id;
+        req.httpMethod = 'GET';
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(401, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void getBenefitPackageDetailsNotFound() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI + '/001000000000000AAA';
+        req.httpMethod = 'GET';
+        req.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(404, RestContext.response.statuscode);
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals('404', response.status_code);
+        System.assertEquals('Not Found', response.error);
+        System.assertEquals(
+            'The searched resource was not found.',
+            response.error_description
+        );
+    }
+
+    @isTest
+    static void getBenefitPackagesWithInvalidStartIndex() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'GET';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.params.put('start_index', '2001');
+        req.params.put('max_results', '100');
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals('400', response.status_code);
+        System.assertEquals(
+            'start_index cannot be greater than 2000.',
+            response.error_description
+        );
+    }
+
+    // ============================================================
+    // POST - SUCCESS
+    // ============================================================
+
+    @isTest
+    static void createBenefitPackage() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(requestBody);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(201, RestContext.response.statuscode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+
+        System.assertNotEquals(null, response.benefit_package_id);
+
+        ServiceContract contract = [
+            SELECT Id, Package_Status__c, Product_Reference__c,
+                   Product__c, StartDate, EndDate, Term,
+                   Amount_of_Policies__c, Policy_Range_Start__c,
+                   Policy_Range_End__c, Legal_Consent_Code__c,
+                   Legal_Consent_Confirmed__c, Legal_Consent_Date__c,
+                   Pricebook2Id
+            FROM ServiceContract
+            WHERE Id = :response.benefit_package_id
+        ];
+
+        System.assertEquals('Draft', contract.Package_Status__c);
+        System.assertEquals('I_C_BR', contract.Product_Reference__c);
+        System.assertEquals(
+            Date.newInstance(2026, 9, 1),
+            contract.StartDate
+        );
+        System.assertEquals(
+            Date.newInstance(2027, 9, 1),
+            contract.EndDate
+        );
+        System.assertEquals(12, contract.Term);
+        System.assertEquals(
+            100,
+            Integer.valueOf(contract.Amount_of_Policies__c)
+        );
+        System.assertEquals('1000', contract.Policy_Range_Start__c);
+        System.assertEquals('1100', contract.Policy_Range_End__c);
+        System.assertEquals(
+            'legal_consent_I_understand',
+            contract.Legal_Consent_Code__c
+        );
+        System.assertEquals(
+            true,
+            contract.Legal_Consent_Confirmed__c
+        );
+        System.assertNotEquals(null, contract.Legal_Consent_Date__c);
+        System.assertNotEquals(null, contract.Product__c);
+        System.assertNotEquals(null, contract.Pricebook2Id);
+
+        List<ContractLineItem> lineItems = [
+            SELECT Benefit_Category__c, Quantity, UnitPrice
+            FROM ContractLineItem
+            WHERE ServiceContractId = :contract.Id
+            ORDER BY Benefit_Category__c
+        ];
+
+        System.assertEquals(2, lineItems.size());
+
+        System.assertEquals('Core', lineItems[0].Benefit_Category__c);
+        System.assertEquals(0, lineItems[0].UnitPrice);
+        System.assertEquals(
+            100,
+            Integer.valueOf(lineItems[0].Quantity)
+        );
+
+        System.assertEquals(
+            'Optional',
+            lineItems[1].Benefit_Category__c
+        );
+        System.assertEquals(50, lineItems[1].UnitPrice);
+        System.assertEquals(
+            100,
+            Integer.valueOf(lineItems[1].Quantity)
+        );
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutOptionalBenefits() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('optional_benefits');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(201, RestContext.response.statuscode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+
+        List<ContractLineItem> lineItems = [
+            SELECT Benefit_Category__c
+            FROM ContractLineItem
+            WHERE ServiceContractId = :response.benefit_package_id
+        ];
+
+        System.assertEquals(1, lineItems.size());
+        System.assertEquals(
+            'Core',
+            lineItems[0].Benefit_Category__c
+        );
+    }
+
+    @isTest
+    static void createBenefitPackageWithEmptyOptionalBenefits() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('optional_benefits', new List<Object>());
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(201, RestContext.response.statuscode);
+    }
+
+    // ============================================================
+    // POST - REQUIRED FIELDS
+    // ============================================================
+
+    @isTest
+    static void createBenefitPackageWithoutProductReference() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('product_reference');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutActiveStartAt() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('active_start_at');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutActiveEndAt() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('active_end_at');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutAmountOfPolicies() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('amount_of_policies');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutCoreBenefits() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('core_benefits');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithoutLegalConsents() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.remove('legal_consents');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageCoreBenefitWithoutBenefitId() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'name' => '(EMC) Emergency Medical Assistance'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageCoreBenefitWithoutName() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'LACIEMS'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageOptionalBenefitWithoutBenefitId() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'name' => 'Cellphone Protection'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageOptionalBenefitWithoutName() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'LACCELPRO'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageOptionalBenefitWithBlankBenefitId() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => '',
+                    'name' => 'Cellphone Protection'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageOptionalBenefitWithBlankName() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'LACCELPRO',
+                    'name' => ''
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    // ============================================================
+    // POST - VALIDATION
+    // ============================================================
+
+    @isTest
+    static void createBenefitPackageWithZeroAmountOfPolicies() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('amount_of_policies', 0);
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithNegativeAmountOfPolicies() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('amount_of_policies', -1);
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithEndDateEqualsStartDate() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('active_end_at', '2026-09-01');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithEndDateBeforeStartDate() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('active_start_at', '2027-09-01');
+        body.put('active_end_at', '2026-09-01');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithInvalidStartDate() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('active_start_at', 'invalid-date');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithPolicyRangeMissingStart() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'affected_policy_range',
+            new Map<String, Object>{
+                'external_number_end_at' => '1100'
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithPolicyRangeMissingEnd() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'affected_policy_range',
+            new Map<String, Object>{
+                'external_number_start_at' => '1000'
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    // ============================================================
+    // POST - RESOURCE / DATA
+    // ============================================================
+
+    @isTest
+    static void createBenefitPackageWithProductNotFound() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put('product_reference', 'PRODUCT-NOT-FOUND');
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithBenefitNotFound() {
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'BENEFIT-NOT-FOUND',
+                    'name' => 'Benefit Not Found'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithProduct2NotFoundForBenefit() {
+        insert new Benefit__c(
+            Name = 'Benefit Without Product',
+            Visa_External_Reference__c = 'NO-PRODUCT-REF',
+            External_Reference__c = 'Benefit_Without_Product'
+        );
+
+        Map<String, Object> body =
+            (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'NO-PRODUCT-REF',
+                    'name' => 'Benefit Without Product'
+                }
+            }
+        );
+
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithInvalidJson() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+        req.requestBody = Blob.valueOf('{"product_reference":"I_C_BR"');
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(400, RestContext.response.statuscode);
+
+        WebportalApiUtility_v1.ErrorMessage response =
+            (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+
+        System.assertEquals('400', response.status_code);
+        System.assertEquals('Bad Request', response.error);
+    }
+
+    @isTest
+    static void createBenefitPackageUnauthorized() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI;
+        req.httpMethod = 'POST';
+        req.requestBody = Blob.valueOf(requestBody);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stoptest();
+
+        System.assertEquals(401, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void createBenefitPackageWithInvalidResourcePath() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI + '/001/cancel/extra';
+        req.httpMethod = 'POST';
+        req.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+
+        try {
+            BenefitsConfigAPIPackages_VEXP.doPost();
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+        }
+
+        Test.stoptest();
+
+        System.assertEquals(404, RestContext.response.statuscode);
+    }
+
+    @isTest
+    static void getBenefitPackageWithInvalidResourcePath() {
+        RestRequest req = new RestRequest();
+        RestResponse res = new RestResponse();
+
+        req.requestURI = BASE_URI + '/invalid/extra';
+        req.httpMethod = 'GET';
+        req.headers.put('authorization2', 'Bearer ' + token);
+
+        RestContext.request = req;
+        RestContext.response = res;
+
+        Test.starttest();
+
+        try {
+            BenefitsConfigAPIPackages_VEXP.doGet();
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+        }
+
+        Test.stoptest();
+
+        System.assertEquals(404, RestContext.response.statuscode);
+    }
+}
+
+
+===============================================
 @IsTest
 private class Test_BenefitsConfigAPIPackages_VEXP {
 
