@@ -1,0 +1,37 @@
+19:52:41.0 (1325912174)|USER_DEBUG|[744]|WARN|####>>>> WebportalToolsCase attachPDFBankTransferToCaseV1 pdfPage: System.PageReference[/apex/Doc_BankTransfer?id=a0S9V00000G4s2DUAR&lan=es] <<<<<<<<
+19:52:41.0 (1325922619)|STATEMENT_EXECUTE|[745]
+19:52:41.0 (1325927203)|VARIABLE_SCOPE_BEGIN|[745]|benefitBlobBR|Blob|false|false
+19:52:41.0 (1325942038)|VARIABLE_ASSIGNMENT|[745]|benefitBlobBR|null
+19:52:41.0 (1325947033)|STATEMENT_EXECUTE|[746]
+19:52:41.0 (1325948224)|STATEMENT_EXECUTE|[746]
+19:52:41.0 (1326000994)|HEAP_ALLOCATE|[754]|Bytes:118
+19:52:41.0 (1326017464)|SYSTEM_METHOD_ENTRY|[1]|Test.Test()
+19:52:41.0 (1326022458)|STATEMENT_EXECUTE|[1]
+19:52:41.0 (1326034518)|SYSTEM_METHOD_EXIT|[1]|Test
+19:52:41.0 (1326045211)|METHOD_ENTRY|[754]||System.Test.isRunningTest()
+19:52:41.0 (1326072467)|METHOD_EXIT|[754]||System.Test.isRunningTest()
+19:52:41.0 (1326079366)|STATEMENT_EXECUTE|[755]
+19:52:41.0 (1697674908)|EXCEPTION_THROWN|[755]|System.VisualforceException: El valor 'null' no es v�lido para el operador ">"
+19:52:41.0 (1697777899)|HEAP_ALLOCATE|[755]|Bytes:53
+19:52:41.0 (1697842410)|VARIABLE_SCOPE_BEGIN|[758]|e|Exception|true|false
+19:52:41.0 (1697905471)|VARIABLE_ASSIGNMENT|[758]|e|"common.apex.runtime.impl.ExecutionException: El valor 'null' no es v�lido para el operador \">\""|0x218154cd
+19:52:41.0 (1697954822)|STATEMENT_EXECUTE|[758]
+19:52:41.0 (1697975704)|STATEMENT_EXECUTE|[759]
+19:52:41.0 (1697986386)|HEAP_ALLOCATE|[759]|Bytes:95
+19:52:41.0 (1698039166)|HEAP_ALLOCATE|[759]|Bytes:49
+19:52:41.0 (1698058251)|HEAP_ALLOCATE|[759]|Bytes:153
+19:52:41.0 (1698121505)|USER_DEBUG|[759]|WARN|####>>>> WebportalToolsCase attachPDFBankTransferToCaseV1 EXCEPTION error generating Doc_Page: El valor 'null' no es v�lido para el operador ">" <<<<<<<<
+19:52:41.0 (1698130093)|STATEMENT_EXECUTE|[760]
+19:52:41.0 (1698156844)|METHOD_EXIT|[727]|01pb0000004l4Vv|WebportalApiUtilityController.attachPDFBankTransferToCaseV1(Id, String, String, String, Id, String, String)
+19:52:41.0 (1698170084)|VARIABLE_SCOPE_BEGIN|[730]|e|Exception|true|false
+19:52:41.0 (1698199411)|VARIABLE_ASSIGNMENT|[730]|e|"common.apex.runtime.impl.ExecutionException: El valor 'null' no es v�lido para el operador \">\""|0x218154cd
+19:52:41.0 (1698204944)|STATEMENT_EXECUTE|[730]
+19:52:41.0 (1698206221)|STATEMENT_EXECUTE|[731]
+19:52:41.0 (1698215782)|HEAP_ALLOCATE|[731]|Bytes:49
+19:52:41.0 (1698225315)|METHOD_EXIT|[196]|01pb0000004l4Vv|WebportalApiUtilityController.attachPDFBankTransferToCaseV1(Id, Id, String)
+19:52:41.0 (1698232404)|VARIABLE_SCOPE_BEGIN|[196]|strAttach|String|false|false
+19:52:41.0 (1698242901)|VARIABLE_ASSIGNMENT|[196]|strAttach|"El valor 'null' no e (29 more) ..."
+19:52:41.0 (1698268718)|STATEMENT_EXECUTE|[197]
+19:52:41.0 (1698271118)|HEAP_ALLOCATE|[197]|Bytes:13
+19:52:41.0 (1698279101)|HEAP_ALLOCATE|[197]|Bytes:62
+19:52:41.0 (1698294842)|USER_DEBUG|[197]|DEBUG|strAttach>>>>El valor 'null' no es v�lido para el operador ">"
