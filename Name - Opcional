@@ -1,3 +1,19 @@
+private static final Map<String, String> POST_REQUIRED_FIELDS =
+    new Map<String, String>{
+        'product_reference' => 'Primitive',
+        'active_start_at' => 'Primitive',
+        'active_end_at' => 'Primitive',
+        'amount_of_policies' => 'Primitive',
+        'core_benefits' => 'List',
+        'core_benefits.benefit_id' => 'Primitive',
+        'core_benefits.name' => 'Primitive',
+        'optional_benefits.benefit_id' => 'Primitive',
+        'optional_benefits.name' => 'Primitive',
+        'legal_consents' => 'List'
+    };
+
+
+
 @RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
 global with sharing class BenefitsConfigAPIPackages_VEXP {
 
