@@ -1,537 +1,106 @@
-<apex:page title="bank_transfer_form" standardController="BankTransfer__c" extensions="Doc_BankTransferController" language="{!lan}" sidebar="false"
-    showHeader="false" standardStylesheets="false" applyHtmlTag="false" contenttype="application/pdf" renderAs="pdf">
+20:29:36.199 (1655818983)|VARIABLE_SCOPE_BEGIN|[5]|childRecords|List<SObject>|true|false
+20:29:36.199 (1656295709)|VARIABLE_ASSIGNMENT|[5]|childRecords|[{"Status":"Not Started","Automatically_created__c":true,"IsDeleted":false,"WhoId":"0039V00001wxS4sQAE","WhatId":"5009V00000y4QsjQAE","ActivityDate":"2026-08-12T00:00:00.000Z","Priority":"Normal","IsVisibleInSelfService":true,"Call_Type__c":"Llamada entrante","IsHighPriority":false,"IsClosed":false,"CurrencyIsoCode":"USD","IsRecurrence":false,"Subject":"Review new docs uplo (2 more) ...","IsArchived":false,"Automatically_closed__c":false,"Is_Test__c":false,"OwnerId":"00GbH000006Gt1tUAC","Send_notification_email__c":false,"IsReminderSet":false}]|0x12c8fbfe
+20:29:36.199 (1656304703)|VARIABLE_SCOPE_BEGIN|[5]|lookupAccountField|String|false|false
+20:29:36.199 (1656310561)|VARIABLE_ASSIGNMENT|[5]|lookupAccountField|"AccountId"
+20:29:36.199 (1656318170)|HEAP_ALLOCATE|[9]|Bytes:5
+20:29:36.199 (1656322322)|STATEMENT_EXECUTE|[8]
+20:29:36.199 (1656357695)|STATEMENT_EXECUTE|[9]
+20:29:36.199 (1656371621)|HEAP_ALLOCATE|[9]|Bytes:4
+20:29:36.199 (1656420775)|VARIABLE_SCOPE_BEGIN|[9]|childRecordsWithAccount|List<SObject>|true|false
+20:29:36.199 (1656428728)|HEAP_ALLOCATE|[EXTERNAL]|Bytes:4
+20:29:36.199 (1656435143)|VARIABLE_ASSIGNMENT|[9]|childRecordsWithAccount|[]|0x38dc0beb
+20:29:36.199 (1656438928)|STATEMENT_EXECUTE|[10]
+20:29:36.199 (1656449991)|HEAP_ALLOCATE|[10]|Bytes:4
+20:29:36.199 (1656465818)|VARIABLE_SCOPE_BEGIN|[10]|accountIds|Set<Id>|true|false
+20:29:36.199 (1656491972)|VARIABLE_ASSIGNMENT|[10]|accountIds|[]|0x67c56fa3
+20:29:36.199 (1656495400)|STATEMENT_EXECUTE|[11]
+20:29:36.199 (1656498260)|HEAP_ALLOCATE|[11]|Bytes:4
+20:29:36.199 (1656506021)|VARIABLE_SCOPE_BEGIN|[11]|testAccountIds|Set<Id>|true|false
+20:29:36.199 (1656514424)|VARIABLE_ASSIGNMENT|[11]|testAccountIds|[]|0x7c39de78
+20:29:36.199 (1656543628)|HEAP_ALLOCATE|[13]|Bytes:5
+20:29:36.199 (1656558746)|HEAP_ALLOCATE|[13]|Bytes:20
+20:29:36.199 (1656581398)|VARIABLE_SCOPE_BEGIN|[13]|childRecord|SObject|true|false
+20:29:36.199 (1656833449)|VARIABLE_ASSIGNMENT|[13]|childRecord|{"Status":"Not Started","Automatically_created__c":true,"IsDeleted":false,"WhoId":"0039V00001wxS4sQAE","WhatId":"5009V00000y4QsjQAE","ActivityDate":"2026-08-12T00:00:00.000Z","Priority":"Normal","IsVisibleInSelfService":true,"Call_Type__c":"Llamada entrante","IsHighPriority":false,"IsClosed":false,"CurrencyIsoCode":"USD","IsRecurrence":false,"Subject":"Review new docs uplo (2 more) ...","IsArchived":false,"Automatically_closed__c":false,"Is_Test__c":false,"OwnerId":"00GbH000006Gt1tUAC","Send_notification_email__c":false,"IsReminderSet":false}|0x7bda765b
+20:29:36.199 (1656840226)|STATEMENT_EXECUTE|[13]
+20:29:36.199 (1656840914)|STATEMENT_EXECUTE|[14]
+20:29:36.199 (1656910224)|VARIABLE_SCOPE_BEGIN|[14]|accountId|Id|false|false
+20:29:36.199 (1656916525)|VARIABLE_ASSIGNMENT|[14]|accountId|null
+20:29:36.199 (1656920027)|STATEMENT_EXECUTE|[16]
+20:29:36.199 (1656925900)|HEAP_ALLOCATE|[13]|Bytes:5
+20:29:36.199 (1656932504)|VARIABLE_ASSIGNMENT|[13]|childRecord|null|
+20:29:36.199 (1656946246)|STATEMENT_EXECUTE|[22]
+20:29:36.199 (1656953082)|METHOD_EXIT|[8]|01p9V00000Qw00f|AccountChildFlagService.setChildFlagFromAccountField(List<SObject>, String)
+20:29:36.199 (1656960501)|SYSTEM_MODE_EXIT|false
+20:29:36.199 (1656967646)|METHOD_EXIT|[12]|01pb0000004J9CO|c_Functions_Task.setTestTask(List<Task>)
+20:29:36.199 (1656982065)|STATEMENT_EXECUTE|[15]
+20:29:36.199 (1656987810)|STATEMENT_EXECUTE|[18]
+20:29:36.199 (1656992836)|STATEMENT_EXECUTE|[21]
+20:29:36.199 (1656998465)|STATEMENT_EXECUTE|[25]
+20:29:36.657 (1657010413)|CUMULATIVE_LIMIT_USAGE
+20:29:36.657 (1657010413)|LIMIT_USAGE_FOR_NS|(default)|
+  Number of SOQL queries: 18 out of 100
+  Number of query rows: 110 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 2 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 2 out of 10000
+  Maximum CPU time: 405 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
 
-    <head>
-        <style>
-            .Bloco2Backgorund {
-                background-color: #dbe5f1;
-            }
+20:29:36.657 (1657010413)|CUMULATIVE_LIMIT_USAGE_END
 
-            .blueText {
-                color: #00b0f0;
-                text-align: left;
-            }
-
-            .darkText {
-                color: #595959;
-                margin-left: 1px;
-                font-size: 11pt !important;
-            }
-
-            .borderRight {
-                border-right: 1px solid #595959 !important;
-            }
-
-            .BankTransForm {
-                text-align: right !important;
-                color: #00b0f0;
-            }
-
-            .table2 {
-                background-color: #dbe5f1;
-                border-top: 1px solid #595959 !important;
-            }
-
-            body {
-                line-height: 115%;
-                font-family: Arial, sans-serif, Arial Unicode MS;
-                font-size: 13pt;
-            }
-
-            p {
-                margin-top: 5px !important;
-                margin-bottom: 5px !important;
-                margin-left: 5px !important;
-            }
-
-            table {
-                margin-top: none;
-                margin-bottom: none;
-                width: 100%;
-            }
-
-            li {
-                margin-top: none;
-                margin-bottom: none;
-                width: 100%;
-            }
-
-            tr {
-                border: none;
-            }
-
-            td {
-                border-top: none;
-                border-bottom: 1px solid #595959 !important;
-                border-left: none;
-                border-right: none;
-            }
-
-            #visa {
-                border: none !important;
-            }
-
-
-            @Page {
-                margin-top: 15px;
-                margin-bottom: 10px;
-                margin-right: 20px;
-                margin-left: 20px;
-            }
-        </style>
-    </head>
-
-    <body>
-        <apex:form >
-            <div>
-                <table cellspacing="0" cellpadding="0">
-                    <tr>
-                        <td id="visa" style="text-align:left; padding-bottom:30px;">
-                            <apex:image url="{!$Resource.logoVISA}" />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="border: none !important">                          
-                            <apex:outputText rendered="{!lan == 'es'}">
-                                <p class="BankTransForm">
-                                    <strong>FORMULARIO DE TRANSFERENCIA BANCARIA</strong>
-                                </p>
-                            </apex:outputText>
-                            <apex:outputText rendered="{!lan != 'es'}">
-                                <p class="BankTransForm">
-                                    <strong>{!$Label.BT_Bank_Transfer_Form}</strong>
-                                </p>
-                            </apex:outputText>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="border-bottom: 2px solid #595959 !important;">
-                            <apex:outputText rendered="{!lan == 'es'}">
-                                <p>
-                                    <strong class="blueText">Información bancaria</strong>
-                                </p>
-                            </apex:outputText>
-                            <apex:outputText rendered="{!lan != 'es'}">
-                                <p>
-                                    <strong class="blueText">{!$Label.BTBankInformation}</strong>
-                                </p>
-                            </apex:outputText>                          
-                        </td>
-                    </tr>
-                </table>
-                <!-- inicio Bank Information 1 -->
-                <table cellspacing="0" cellpadding="0">
-                    <!-- A -->
-                    <tr>
-                        <td class="borderRight">
-                            <p>
-                                <strong>
-                                    <span class="blueText">A</span>
-                                    <apex:outputText rendered="{!lan = 'es'}">
-                                        <span class="darkText">Nombre del titular de la cuenta</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$Label.BTNameAcc}</span>
-                                    </apex:outputText>                                   
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Person_First_Name__c + ' ' + bankTransferInfo.BankAccountHolder_Person_Last_Name__c}"
-                                />
-                            </p>
-                        </td>
-                        <td>
-                            <p>
-                                <strong>
-                                    <span class="blueText">B</span>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <span class="darkText">Nombre del banco</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$ObjectType.BankTransfer__c.Fields.Name.label}</span>
-                                    </apex:outputText>                                   
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.Name}" />
-                            </p>
-                        </td>
-                    </tr>
-                    <!-- B -->
-
-                    <tr>
-                        <td class="borderRight">
-                            <p>
-                                <strong>
-                                    <span class="blueText">C</span>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <span class="darkText">Dirección</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$Label.BTStreetAddressus}</span>
-                                    </apex:outputText>                                   
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Street_Address__c}" />
-                            </p>
-                        </td>
-
-                        <td>
-                            <p>
-                                <strong>
-                                    <span class="blueText">D</span>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <span class="darkText">Ciudad/Código postal</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$Label.BTCityZipCodeus}</span>
-                                    </apex:outputText>                                    
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Address_Locality__c} {!bankTransferInfo.BankAccountHolder_Address_Postal_Code__c}"
-                                />
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="borderRight">
-                            <p>
-                                <strong>
-                                    <span class="blueText">E</span>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <span class="darkText">País</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$Label.BTCountry}</span>
-                                    </apex:outputText>                                   
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c}" />
-                            </p>
-                        </td>
-                        <!-- C -->
-                        <td>
-                            <p>
-                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c == 'SWIFT_BIC'}">
-                                    <strong>
-                                        <span class="blueText">F</span>
-                                        <span class="darkText">-</span>
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="-" />
-                                </apex:outputPanel>
-
-                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c != 'SWIFT_BIC'}">
-                                    <strong>
-                                        <span class="blueText">F</span>
-                                        <span class="darkText">{!BankTransfer__c.Wire_Code_Type__c}</span>
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
-                                </apex:outputPanel>
-
-                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ARGENTINA'}">
-                                    <strong>
-                                        <span class="blueText">F</span>
-                                        <span class="darkText">CBU</span>
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
-                                </apex:outputPanel>
-
-                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'MEXICO' && bankTransferInfo.Wire_Code_Type__c == 'CLABE'}">
-                                    <strong>
-                                        <span class="blueText">F</span>
-                                        <span class="darkText">{!bankTransferInfo.Wire_Code_Type__c}</span>
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
-                                </apex:outputPanel>
-
-                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c == 'IBAN'}">
-                                    <strong>
-                                        <span class="blueText">F</span>
-                                        <span class="darkText">{!bankTransferInfo.Wire_Code_Type__c}</span>
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
-                                </apex:outputPanel>
-                            </p>
-                        </td>
-                    </tr>
-                    <!-- D -->
-                    <tr>
-                        <!-- G -->
-                        <td class="borderRight">
-                            <p>
-                                <strong>
-                                    <span class="blueText">G</span>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <span class="darkText">Número de cuenta donde se depositará la cantidad</span>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <span class="darkText">{!$Label.BTBankAccountNumberDesc}</span>
-                                    </apex:outputText>
-                                    <br/>
-                                </strong>
-                                <apex:outputLabel value="{!bankTransferInfo.Bank_Account_Number__c}" />
-                            </p>
-                        </td>
-
-                        <!-- H -->
-                        <td>
-                            <apex:outputPanel rendered="{!
-                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'CHILE' ||
-                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'PERU' ||
-                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ECUADOR' ||
-                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'COLOMBIA'
-                            }">
-                                <p>
-                                    <strong>
-                                        <span class="blueText">H</span>
-
-                                        <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'CHILE'}">
-                                            <span class="darkText">RUN</span>
-                                        </apex:outputPanel>
-
-                                        <apex:outputPanel rendered="{!
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'PERU' ||
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ECUADOR' ||
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'COLOMBIA'
-                                        }">
-                                            <span class="darkText">DNI</span>
-                                        </apex:outputPanel>
-
-                                        <br/>
-                                    </strong>
-
-                                    <apex:outputLabel value="{!Dni}" />
-                                </p>
-                            </apex:outputPanel>
-                        </td>
-                    </tr>
-                </table>
-                <!--/fim Bank Information 1-->
-                <!--Inicio Intermediary Bank Information -->
-                <apex:outputPanel rendered="{!BankTransfer__c.Intermediary_Bank_Account_Number__c != null}">
-                    <table class="table2" cellspacing="0" cellpadding="0">
-                        <tr>
-                            <td colspan="2">
-                                <p>
-                                    <apex:outputText rendered="{!lan == 'es'}">
-                                        <strong class="blueText">Información del banco intermediario</strong>
-                                    </apex:outputText>
-                                    <apex:outputText rendered="{!lan != 'es'}">
-                                        <strong class="blueText">{!$Label.BTIntermediaryBank}</strong>
-                                    </apex:outputText>                                   
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="borderRight">
-                                <p>
-                                    <strong>
-                                        <span class="blueText">A</span>
-                                        <apex:outputText rendered="{!lan == 'es'}">
-                                            <span class="darkText">Nombre del banco intermediario</span>
-                                        </apex:outputText>
-                                        <apex:outputText rendered="{!lan != 'es'}">
-                                            <span class="darkText">{!$Label.BTNameInterBank}</span>
-                                        </apex:outputText>                                       
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!bankTransferInfo.Intermediary_Bank_Name__c}" />
-                                </p>
-                            </td>
-                            <td>
-                                <p>
-                                    <strong>
-                                        <span class="blueText">B</span>
-                                        <apex:outputText rendered="{!lan == 'es'}">
-                                            <span class="darkText">Banco intermediario ABA o SWIFT</span>
-                                        </apex:outputText>
-                                        <apex:outputText rendered="{!lan != 'es'}">
-                                            <span class="darkText">{!$Label.BTInterABASWIFT}</span>
-                                        </apex:outputText>                                       
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!Intermediary_Value}" />
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td colspan="2">
-                                <p>
-                                    <strong>
-                                        <span class="blueText">C</span>
-                                        <apex:outputText rendered="{!lan == 'es'}">
-                                            <span class="darkText">Número de cuenta bancaria del intermediario</span>
-                                        </apex:outputText>
-                                        <apex:outputText rendered="{!lan != 'es'}">
-                                            <span class="darkText">{!$Label.BTInterBankAccNumber}</span>
-                                        </apex:outputText>                                        
-                                        <br/>
-                                    </strong>
-                                    <apex:outputLabel value="{!bankTransferInfo.Intermediary_Bank_Account_Number__c}" />
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
-                </apex:outputPanel>
-                <!-- Inicio do Bloco da Argentina -->
-                <!--apex:outputPanel rendered="{!bankTransferInfo.Case__r.Bin__r.BIN_Country__c == 'ARGENTINA'}"-->
-
-                <apex:outputPanel rendered="{!bankTransferInfo.Wire_Codes__r.size > 0 && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA'}">
-                    <table class="table2" cellspacing="0" cellpadding="0">
-                        <tr>
-                            <td colspan="2">
-                                <p>
-                                    <strong class="blueText">
-                                        <apex:outputLabel value="{!$Label.BT_Wire_Codes}" />
-                                    </strong>
-                                </p>
-                            </td>
-                        </tr>
-                        <apex:repeat value="{!bankTransferInfo.Wire_Codes__r}" var="wireCode">
-                            <tr>
-                                <td class="borderRight" width="20%">
-                                    <p>
-                                        <strong class="blueText">
-                                            <apex:outputLabel value="{!wireCode.Code_Type__c}" />
-                                        </strong>
-                                    </p>
-                                </td>
-                                <td>
-                                    <p>
-                                        <span class="darkText" width="80%">
-                                            <apex:outputLabel value="{!wireCode.Value__c}" />
-                                        </span>
-                                    </p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="borderRight" width="20%">
-                                    <p>
-                                        <strong class="blueText">
-                                            <apex:outputLabel value="Code Relationship" />
-                                        </strong>
-                                    </p>
-                                </td>
-                                <td>
-                                    <p>
-                                        <span class="darkText" width="80%">
-                                            <apex:outputLabel value="{!wireCode.Relationship__c}" />
-                                        </span>
-                                    </p>
-                                </td>
-                            </tr>
-                        </apex:repeat>
-                    </table>
-                </apex:outputPanel>
-
-                <apex:outputPanel rendered="{!bankTransferInfo.Wire_Codes__r.size > 0 && bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ARGENTINA'}">
-                    <table class="table2" cellspacing="0" cellpadding="0">
-                        <tr>
-                            <td colspan="2">
-                                <p>
-                                    <strong class="blueText">
-                                        <apex:outputLabel value="{!$Label.BT_Wire_Codes}" />
-                                    </strong>
-                                </p>
-                            </td>
-                        </tr>
-                        <apex:repeat value="{!bankTransferInfo.Wire_Codes__r}" var="wireCode">
-                            <tr>
-                                <td class="borderRight" width="20%">
-                                    <p>
-                                        <strong class="blueText">
-                                            <apex:outputLabel value="CUIT/CUIL" />
-                                        </strong>
-                                    </p>
-                                </td>
-                                <td>
-                                    <p>
-                                        <span class="darkText" width="80%">
-                                            <apex:outputLabel value="{!CuitCuil}" />
-                                        </span>
-                                    </p>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td class="borderRight" width="20%">
-                                    <p>
-                                        <strong class="blueText">
-                                            <apex:outputLabel value="SWIFT CODE" />
-                                        </strong>
-                                    </p>
-                                </td>
-                                <td>
-                                    <p>
-                                        <span class="darkText" width="80%">
-                                            <apex:outputLabel value="{!wireCode.Value__c}" />
-                                        </span>
-                                    </p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="borderRight" width="20%">
-                                    <p>
-                                        <strong class="blueText">
-                                            <apex:outputLabel value="Code Relationship" />
-                                        </strong>
-                                    </p>
-                                </td>
-                                <td>
-                                    <p>
-                                        <span class="darkText" width="80%">
-                                            <apex:outputLabel value="{!wireCode.Relationship__c}" />
-                                        </span>
-                                    </p>
-                                </td>
-                            </tr>
-                        </apex:repeat>
-                    </table>
-                </apex:outputPanel>
-
-                <br/>
-                <apex:outputText rendered="{!lan = 'es'}">
-                    <span class="darkText" style="font-size: 10pt !important;">Yo,</span>
-                </apex:outputText>
-                <apex:outputText rendered="{!lan != 'es'}">
-                    <span class="darkText" style="font-size: 10pt !important;">I,</span>
-                </apex:outputText>                
-                <strong class="darktext">
-                    <apex:outputLabel style="font-size: 11pt !important;" value="{!bankTransferInfo.BankAccountHolder_Person_First_Name__c + ' ' + bankTransferInfo.BankAccountHolder_Person_Last_Name__c}"
-                    />
-                </strong>
-                <apex:outputText rendered="{!lan = 'es'}">
-                    <span class="darkText" style="font-size: 10pt !important;">
-                        aquí otorgo mi autorización para que mi reembolso sea depositado en la cuenta bancaria detallada arriba.
-                    </span>
-                </apex:outputText>
-                <apex:outputText rendered="{!lan != 'es'}">
-                    <span class="darkText" style="font-size: 10pt !important;">
-                        here by grant my authorization for my reimbursement to be deposited into the Bank Account detailed above.
-                    </span>
-                </apex:outputText>              
-                <br/>
-                <br/>
-
-                <apex:outputText rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'BRAZIL' &&
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' &&
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' &&
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' &&
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'COLOMBIA'} &&
-                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'PERU'}">
-
-                    <p class="darkText" style="text-align:right;">
-                        ____________________________
-                    </p>
-
-                    <p class="darkText" style="text-align:right;">
-                        <strong>Account Holder's Signature</strong>
-                    </p>
-                </apex:outputText>
-            </div>
-        </apex:form>
-    </body>
-</apex:page>
+20:29:36.199 (1657371886)|CODE_UNIT_FINISHED|t_Task on Task trigger event BeforeInsert|__sfdc_trigger/t_Task
+20:29:36.199 (1683282587)|DML_END|[183]
+20:29:36.199 (1683377424)|EXCEPTION_THROWN|[183]|System.DmlException: Insert failed. First exception on row 0; first error: INVALID_OPERATION, Queue not associated with this SObject type: []
+20:29:36.199 (1685608179)|HEAP_ALLOCATE|[183]|Bytes:124
+20:29:36.199 (1685664028)|VARIABLE_SCOPE_BEGIN|[213]|e|System.DmlException|true|false
+20:29:36.199 (1685720945)|VARIABLE_ASSIGNMENT|[213]|e|"common.apex.runtime.impl.DmlExecutionException: Insert failed. First exception on row 0; first error: INVALID_OPERATION, Queue not associated with this SObject type: []"|0x7abe2713
+20:29:36.199 (1685726618)|STATEMENT_EXECUTE|[213]
+20:29:36.199 (1685727659)|STATEMENT_EXECUTE|[214]
+20:29:36.199 (1685796654)|STATEMENT_EXECUTE|[215]
+20:29:36.199 (1685869066)|HEAP_ALLOCATE|[215]|Bytes:3
+20:29:36.199 (1685880373)|HEAP_ALLOCATE|[215]|Bytes:16
+20:29:36.199 (1685885718)|HEAP_ALLOCATE|[215]|Bytes:21
+20:29:36.199 (1685916932)|HEAP_ALLOCATE|[215]|Bytes:120
+20:29:36.199 (1685930451)|CONSTRUCTOR_ENTRY|[215]|01p0N00000ASuS7|<init>(String,String,String)|WebportalApiUtility_v1.APIError
+20:29:36.199 (1685957029)|VARIABLE_SCOPE_BEGIN|[397]|this|WebportalApiUtility_v1.APIError|true|false
+20:29:36.199 (1686011919)|VARIABLE_ASSIGNMENT|[397]|this|{}|0x732c000f
+20:29:36.199 (1686015916)|VARIABLE_SCOPE_BEGIN|[397]|status_code|String|false|false
+20:29:36.199 (1686023056)|VARIABLE_ASSIGNMENT|[397]|status_code|"500"
+20:29:36.199 (1686025184)|VARIABLE_SCOPE_BEGIN|[397]|error|String|false|false
+20:29:36.199 (1686030699)|VARIABLE_ASSIGNMENT|[397]|error|"internal_server_erro (1 more) ..."
+20:29:36.199 (1686032968)|VARIABLE_SCOPE_BEGIN|[397]|error_description|String|false|false
+20:29:36.199 (1686037625)|VARIABLE_ASSIGNMENT|[397]|error_description|"Insert failed. First (100 more) ..."
+20:29:36.199 (1686040501)|STATEMENT_EXECUTE|[392]
+20:29:36.199 (1686041258)|STATEMENT_EXECUTE|[393]
+20:29:36.199 (1686041999)|STATEMENT_EXECUTE|[394]
+20:29:36.199 (1686042915)|STATEMENT_EXECUTE|[395]
+20:29:36.199 (1686057711)|STATEMENT_EXECUTE|[397]
+20:29:36.199 (1686058478)|STATEMENT_EXECUTE|[398]
+20:29:36.199 (1686062833)|VARIABLE_ASSIGNMENT|[398]|this.status_code|"500"|0x732c000f
+20:29:36.199 (1686065634)|STATEMENT_EXECUTE|[399]
+20:29:36.199 (1686068495)|VARIABLE_ASSIGNMENT|[399]|this.error|"internal_server_erro (1 more) ..."|0x732c000f
+20:29:36.199 (1686070989)|STATEMENT_EXECUTE|[400]
+20:29:36.199 (1686073651)|VARIABLE_ASSIGNMENT|[400]|this.error_description|"Insert failed. First (100 more) ..."|0x732c000f
+20:29:36.199 (1686079455)|CONSTRUCTOR_EXIT|[215]|01p0N00000ASuS7|<init>(String,String,String)|WebportalApiUtility_v1.APIError
+20:29:36.199 (1686089164)|METHOD_ENTRY|[215]||System.JSON.serializePretty(Object)
+20:29:36.199 (1686177736)|METHOD_EXIT|[215]||System.JSON.serializePretty(Object)
+20:29:36.199 (1686214493)|HEAP_ALLOCATE|[215]|Bytes:4
+20:29:36.199 (1686247723)|METHOD_EXIT|[5]|01p5p00000CTaTY|WebportalClaimsAPIAttachComplete_V1.doPost()
+20:29:36.199 (1686255214)|SYSTEM_MODE_EXIT|true
+20:29:36.199 (1687532195)|METHOD_EXIT|[104]|01p5p00000CTaTY|WebportalClaimsAPIAttachComplete_V1.postHandler()
+20:29:36.199 (1687579662)|STATEMENT_EXECUTE|[106]
+20:29:36.199 (1687581010)|STATEMENT_EXECUTE|[107]
+20:29:36.199 (1687782369)|HEAP_ALLOCATE|[107]|Bytes:32
+20:29:36.199 (1687855960)|HEAP_ALLOCATE|[109]|Bytes:212
+20:29:36.199 (1687889824)|CONSTRUCTOR_ENTRY|[107]|01p9V00000ItJHY|<init>(String)|PrivilegeUtils.PrivilegeUtilsException
+20:29:36.199 (1687904996)|VARIABLE_SCOPE_BEGIN|[891]|this|PrivilegeUtils.PrivilegeUtilsException|true|false
+20:29:36.199 (1687999091)|VARIABLE_ASSIGNMENT|[891]|this|"common.apex.runtime.impl.ExecutionException"|0x160396f4
+20:29:36.199 (1688008667)|HEAP_ALLOCATE|[EXTERNAL]|Bytes:43
+20:29:36.199 (1688086162)|VARIABLE_ASSIGNMENT|[EXTERNAL]|this|"common.apex.runtime.impl.ExecutionException"|0x5bcc043
+20:29:36.199 (1688094043)|VARIABLE_ASSIGNMENT|[EXTERNAL]|message|"{\n  \"status_code\" :  (192 more) ..."
