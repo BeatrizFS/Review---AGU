@@ -1,0 +1,85 @@
+private static void validateCoreBenefits(List<CoreBenefit> benefits) {
+    for (CoreBenefit benefit : benefits) {
+        if (
+            benefit == null ||
+            String.isBlank(benefit.benefit_id) ||
+            String.isBlank(benefit.name)
+        ) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'core_benefits.benefit_id and name are required.'
+            );
+        }
+    }
+}
+
+private static void validateOptionalBenefits(
+    List<OptionalBenefit> benefits
+) {
+    if (benefits == null) {
+        return;
+    }
+
+    for (OptionalBenefit benefit : benefits) {
+        if (
+            benefit == null ||
+            String.isBlank(benefit.benefit_id) ||
+            String.isBlank(benefit.name)
+        ) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'optional_benefits.benefit_id and name are required when optional_benefits is specified.'
+            );
+        }
+    }
+}
+
+private static void validateCreateRequest(
+    BenefitPackage request,
+    Date startDate,
+    Date endDate
+) {
+    if (startDate == null || endDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_start_at and active_end_at must be valid dates.'
+        );
+    }
+
+    if (endDate <= startDate) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_end_at must be greater than active_start_at.'
+        );
+    }
+
+    if (
+        request.amount_of_policies == null ||
+        request.amount_of_policies < 1
+    ) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'amount_of_policies must be a positive integer.'
+        );
+    }
+
+    if (
+        request.core_benefits == null ||
+        request.core_benefits.isEmpty()
+    ) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'core_benefits must contain at least one item.'
+        );
+    }
+
+    validateCoreBenefits(request.core_benefits);
+    validateOptionalBenefits(request.optional_benefits);
+    validatePolicyRange(request.affected_policy_range);
+}
