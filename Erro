@@ -1,37 +1,537 @@
-19:52:41.0 (1325912174)|USER_DEBUG|[744]|WARN|####>>>> WebportalToolsCase attachPDFBankTransferToCaseV1 pdfPage: System.PageReference[/apex/Doc_BankTransfer?id=a0S9V00000G4s2DUAR&lan=es] <<<<<<<<
-19:52:41.0 (1325922619)|STATEMENT_EXECUTE|[745]
-19:52:41.0 (1325927203)|VARIABLE_SCOPE_BEGIN|[745]|benefitBlobBR|Blob|false|false
-19:52:41.0 (1325942038)|VARIABLE_ASSIGNMENT|[745]|benefitBlobBR|null
-19:52:41.0 (1325947033)|STATEMENT_EXECUTE|[746]
-19:52:41.0 (1325948224)|STATEMENT_EXECUTE|[746]
-19:52:41.0 (1326000994)|HEAP_ALLOCATE|[754]|Bytes:118
-19:52:41.0 (1326017464)|SYSTEM_METHOD_ENTRY|[1]|Test.Test()
-19:52:41.0 (1326022458)|STATEMENT_EXECUTE|[1]
-19:52:41.0 (1326034518)|SYSTEM_METHOD_EXIT|[1]|Test
-19:52:41.0 (1326045211)|METHOD_ENTRY|[754]||System.Test.isRunningTest()
-19:52:41.0 (1326072467)|METHOD_EXIT|[754]||System.Test.isRunningTest()
-19:52:41.0 (1326079366)|STATEMENT_EXECUTE|[755]
-19:52:41.0 (1697674908)|EXCEPTION_THROWN|[755]|System.VisualforceException: El valor 'null' no es v�lido para el operador ">"
-19:52:41.0 (1697777899)|HEAP_ALLOCATE|[755]|Bytes:53
-19:52:41.0 (1697842410)|VARIABLE_SCOPE_BEGIN|[758]|e|Exception|true|false
-19:52:41.0 (1697905471)|VARIABLE_ASSIGNMENT|[758]|e|"common.apex.runtime.impl.ExecutionException: El valor 'null' no es v�lido para el operador \">\""|0x218154cd
-19:52:41.0 (1697954822)|STATEMENT_EXECUTE|[758]
-19:52:41.0 (1697975704)|STATEMENT_EXECUTE|[759]
-19:52:41.0 (1697986386)|HEAP_ALLOCATE|[759]|Bytes:95
-19:52:41.0 (1698039166)|HEAP_ALLOCATE|[759]|Bytes:49
-19:52:41.0 (1698058251)|HEAP_ALLOCATE|[759]|Bytes:153
-19:52:41.0 (1698121505)|USER_DEBUG|[759]|WARN|####>>>> WebportalToolsCase attachPDFBankTransferToCaseV1 EXCEPTION error generating Doc_Page: El valor 'null' no es v�lido para el operador ">" <<<<<<<<
-19:52:41.0 (1698130093)|STATEMENT_EXECUTE|[760]
-19:52:41.0 (1698156844)|METHOD_EXIT|[727]|01pb0000004l4Vv|WebportalApiUtilityController.attachPDFBankTransferToCaseV1(Id, String, String, String, Id, String, String)
-19:52:41.0 (1698170084)|VARIABLE_SCOPE_BEGIN|[730]|e|Exception|true|false
-19:52:41.0 (1698199411)|VARIABLE_ASSIGNMENT|[730]|e|"common.apex.runtime.impl.ExecutionException: El valor 'null' no es v�lido para el operador \">\""|0x218154cd
-19:52:41.0 (1698204944)|STATEMENT_EXECUTE|[730]
-19:52:41.0 (1698206221)|STATEMENT_EXECUTE|[731]
-19:52:41.0 (1698215782)|HEAP_ALLOCATE|[731]|Bytes:49
-19:52:41.0 (1698225315)|METHOD_EXIT|[196]|01pb0000004l4Vv|WebportalApiUtilityController.attachPDFBankTransferToCaseV1(Id, Id, String)
-19:52:41.0 (1698232404)|VARIABLE_SCOPE_BEGIN|[196]|strAttach|String|false|false
-19:52:41.0 (1698242901)|VARIABLE_ASSIGNMENT|[196]|strAttach|"El valor 'null' no e (29 more) ..."
-19:52:41.0 (1698268718)|STATEMENT_EXECUTE|[197]
-19:52:41.0 (1698271118)|HEAP_ALLOCATE|[197]|Bytes:13
-19:52:41.0 (1698279101)|HEAP_ALLOCATE|[197]|Bytes:62
-19:52:41.0 (1698294842)|USER_DEBUG|[197]|DEBUG|strAttach>>>>El valor 'null' no es v�lido para el operador ">"
+<apex:page title="bank_transfer_form" standardController="BankTransfer__c" extensions="Doc_BankTransferController" language="{!lan}" sidebar="false"
+    showHeader="false" standardStylesheets="false" applyHtmlTag="false" contenttype="application/pdf" renderAs="pdf">
+
+    <head>
+        <style>
+            .Bloco2Backgorund {
+                background-color: #dbe5f1;
+            }
+
+            .blueText {
+                color: #00b0f0;
+                text-align: left;
+            }
+
+            .darkText {
+                color: #595959;
+                margin-left: 1px;
+                font-size: 11pt !important;
+            }
+
+            .borderRight {
+                border-right: 1px solid #595959 !important;
+            }
+
+            .BankTransForm {
+                text-align: right !important;
+                color: #00b0f0;
+            }
+
+            .table2 {
+                background-color: #dbe5f1;
+                border-top: 1px solid #595959 !important;
+            }
+
+            body {
+                line-height: 115%;
+                font-family: Arial, sans-serif, Arial Unicode MS;
+                font-size: 13pt;
+            }
+
+            p {
+                margin-top: 5px !important;
+                margin-bottom: 5px !important;
+                margin-left: 5px !important;
+            }
+
+            table {
+                margin-top: none;
+                margin-bottom: none;
+                width: 100%;
+            }
+
+            li {
+                margin-top: none;
+                margin-bottom: none;
+                width: 100%;
+            }
+
+            tr {
+                border: none;
+            }
+
+            td {
+                border-top: none;
+                border-bottom: 1px solid #595959 !important;
+                border-left: none;
+                border-right: none;
+            }
+
+            #visa {
+                border: none !important;
+            }
+
+
+            @Page {
+                margin-top: 15px;
+                margin-bottom: 10px;
+                margin-right: 20px;
+                margin-left: 20px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <apex:form >
+            <div>
+                <table cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td id="visa" style="text-align:left; padding-bottom:30px;">
+                            <apex:image url="{!$Resource.logoVISA}" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="border: none !important">                          
+                            <apex:outputText rendered="{!lan == 'es'}">
+                                <p class="BankTransForm">
+                                    <strong>FORMULARIO DE TRANSFERENCIA BANCARIA</strong>
+                                </p>
+                            </apex:outputText>
+                            <apex:outputText rendered="{!lan != 'es'}">
+                                <p class="BankTransForm">
+                                    <strong>{!$Label.BT_Bank_Transfer_Form}</strong>
+                                </p>
+                            </apex:outputText>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="border-bottom: 2px solid #595959 !important;">
+                            <apex:outputText rendered="{!lan == 'es'}">
+                                <p>
+                                    <strong class="blueText">Información bancaria</strong>
+                                </p>
+                            </apex:outputText>
+                            <apex:outputText rendered="{!lan != 'es'}">
+                                <p>
+                                    <strong class="blueText">{!$Label.BTBankInformation}</strong>
+                                </p>
+                            </apex:outputText>                          
+                        </td>
+                    </tr>
+                </table>
+                <!-- inicio Bank Information 1 -->
+                <table cellspacing="0" cellpadding="0">
+                    <!-- A -->
+                    <tr>
+                        <td class="borderRight">
+                            <p>
+                                <strong>
+                                    <span class="blueText">A</span>
+                                    <apex:outputText rendered="{!lan = 'es'}">
+                                        <span class="darkText">Nombre del titular de la cuenta</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$Label.BTNameAcc}</span>
+                                    </apex:outputText>                                   
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Person_First_Name__c + ' ' + bankTransferInfo.BankAccountHolder_Person_Last_Name__c}"
+                                />
+                            </p>
+                        </td>
+                        <td>
+                            <p>
+                                <strong>
+                                    <span class="blueText">B</span>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <span class="darkText">Nombre del banco</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$ObjectType.BankTransfer__c.Fields.Name.label}</span>
+                                    </apex:outputText>                                   
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.Name}" />
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- B -->
+
+                    <tr>
+                        <td class="borderRight">
+                            <p>
+                                <strong>
+                                    <span class="blueText">C</span>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <span class="darkText">Dirección</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$Label.BTStreetAddressus}</span>
+                                    </apex:outputText>                                   
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Street_Address__c}" />
+                            </p>
+                        </td>
+
+                        <td>
+                            <p>
+                                <strong>
+                                    <span class="blueText">D</span>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <span class="darkText">Ciudad/Código postal</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$Label.BTCityZipCodeus}</span>
+                                    </apex:outputText>                                    
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.BankAccountHolder_Address_Locality__c} {!bankTransferInfo.BankAccountHolder_Address_Postal_Code__c}"
+                                />
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="borderRight">
+                            <p>
+                                <strong>
+                                    <span class="blueText">E</span>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <span class="darkText">País</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$Label.BTCountry}</span>
+                                    </apex:outputText>                                   
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c}" />
+                            </p>
+                        </td>
+                        <!-- C -->
+                        <td>
+                            <p>
+                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c == 'SWIFT_BIC'}">
+                                    <strong>
+                                        <span class="blueText">F</span>
+                                        <span class="darkText">-</span>
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="-" />
+                                </apex:outputPanel>
+
+                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c != 'SWIFT_BIC'}">
+                                    <strong>
+                                        <span class="blueText">F</span>
+                                        <span class="darkText">{!BankTransfer__c.Wire_Code_Type__c}</span>
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
+                                </apex:outputPanel>
+
+                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ARGENTINA'}">
+                                    <strong>
+                                        <span class="blueText">F</span>
+                                        <span class="darkText">CBU</span>
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
+                                </apex:outputPanel>
+
+                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'MEXICO' && bankTransferInfo.Wire_Code_Type__c == 'CLABE'}">
+                                    <strong>
+                                        <span class="blueText">F</span>
+                                        <span class="darkText">{!bankTransferInfo.Wire_Code_Type__c}</span>
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
+                                </apex:outputPanel>
+
+                                <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'GUATEMALA' && bankTransferInfo.Wire_Code_Type__c == 'IBAN'}">
+                                    <strong>
+                                        <span class="blueText">F</span>
+                                        <span class="darkText">{!bankTransferInfo.Wire_Code_Type__c}</span>
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!BankTransfer__c.Wire_Code_Value__c}" />
+                                </apex:outputPanel>
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- D -->
+                    <tr>
+                        <!-- G -->
+                        <td class="borderRight">
+                            <p>
+                                <strong>
+                                    <span class="blueText">G</span>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <span class="darkText">Número de cuenta donde se depositará la cantidad</span>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <span class="darkText">{!$Label.BTBankAccountNumberDesc}</span>
+                                    </apex:outputText>
+                                    <br/>
+                                </strong>
+                                <apex:outputLabel value="{!bankTransferInfo.Bank_Account_Number__c}" />
+                            </p>
+                        </td>
+
+                        <!-- H -->
+                        <td>
+                            <apex:outputPanel rendered="{!
+                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'CHILE' ||
+                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'PERU' ||
+                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ECUADOR' ||
+                                bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'COLOMBIA'
+                            }">
+                                <p>
+                                    <strong>
+                                        <span class="blueText">H</span>
+
+                                        <apex:outputPanel rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'CHILE'}">
+                                            <span class="darkText">RUN</span>
+                                        </apex:outputPanel>
+
+                                        <apex:outputPanel rendered="{!
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'PERU' ||
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ECUADOR' ||
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'COLOMBIA'
+                                        }">
+                                            <span class="darkText">DNI</span>
+                                        </apex:outputPanel>
+
+                                        <br/>
+                                    </strong>
+
+                                    <apex:outputLabel value="{!Dni}" />
+                                </p>
+                            </apex:outputPanel>
+                        </td>
+                    </tr>
+                </table>
+                <!--/fim Bank Information 1-->
+                <!--Inicio Intermediary Bank Information -->
+                <apex:outputPanel rendered="{!BankTransfer__c.Intermediary_Bank_Account_Number__c != null}">
+                    <table class="table2" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td colspan="2">
+                                <p>
+                                    <apex:outputText rendered="{!lan == 'es'}">
+                                        <strong class="blueText">Información del banco intermediario</strong>
+                                    </apex:outputText>
+                                    <apex:outputText rendered="{!lan != 'es'}">
+                                        <strong class="blueText">{!$Label.BTIntermediaryBank}</strong>
+                                    </apex:outputText>                                   
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="borderRight">
+                                <p>
+                                    <strong>
+                                        <span class="blueText">A</span>
+                                        <apex:outputText rendered="{!lan == 'es'}">
+                                            <span class="darkText">Nombre del banco intermediario</span>
+                                        </apex:outputText>
+                                        <apex:outputText rendered="{!lan != 'es'}">
+                                            <span class="darkText">{!$Label.BTNameInterBank}</span>
+                                        </apex:outputText>                                       
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!bankTransferInfo.Intermediary_Bank_Name__c}" />
+                                </p>
+                            </td>
+                            <td>
+                                <p>
+                                    <strong>
+                                        <span class="blueText">B</span>
+                                        <apex:outputText rendered="{!lan == 'es'}">
+                                            <span class="darkText">Banco intermediario ABA o SWIFT</span>
+                                        </apex:outputText>
+                                        <apex:outputText rendered="{!lan != 'es'}">
+                                            <span class="darkText">{!$Label.BTInterABASWIFT}</span>
+                                        </apex:outputText>                                       
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!Intermediary_Value}" />
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="2">
+                                <p>
+                                    <strong>
+                                        <span class="blueText">C</span>
+                                        <apex:outputText rendered="{!lan == 'es'}">
+                                            <span class="darkText">Número de cuenta bancaria del intermediario</span>
+                                        </apex:outputText>
+                                        <apex:outputText rendered="{!lan != 'es'}">
+                                            <span class="darkText">{!$Label.BTInterBankAccNumber}</span>
+                                        </apex:outputText>                                        
+                                        <br/>
+                                    </strong>
+                                    <apex:outputLabel value="{!bankTransferInfo.Intermediary_Bank_Account_Number__c}" />
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </apex:outputPanel>
+                <!-- Inicio do Bloco da Argentina -->
+                <!--apex:outputPanel rendered="{!bankTransferInfo.Case__r.Bin__r.BIN_Country__c == 'ARGENTINA'}"-->
+
+                <apex:outputPanel rendered="{!bankTransferInfo.Wire_Codes__r.size > 0 && bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA'}">
+                    <table class="table2" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td colspan="2">
+                                <p>
+                                    <strong class="blueText">
+                                        <apex:outputLabel value="{!$Label.BT_Wire_Codes}" />
+                                    </strong>
+                                </p>
+                            </td>
+                        </tr>
+                        <apex:repeat value="{!bankTransferInfo.Wire_Codes__r}" var="wireCode">
+                            <tr>
+                                <td class="borderRight" width="20%">
+                                    <p>
+                                        <strong class="blueText">
+                                            <apex:outputLabel value="{!wireCode.Code_Type__c}" />
+                                        </strong>
+                                    </p>
+                                </td>
+                                <td>
+                                    <p>
+                                        <span class="darkText" width="80%">
+                                            <apex:outputLabel value="{!wireCode.Value__c}" />
+                                        </span>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="borderRight" width="20%">
+                                    <p>
+                                        <strong class="blueText">
+                                            <apex:outputLabel value="Code Relationship" />
+                                        </strong>
+                                    </p>
+                                </td>
+                                <td>
+                                    <p>
+                                        <span class="darkText" width="80%">
+                                            <apex:outputLabel value="{!wireCode.Relationship__c}" />
+                                        </span>
+                                    </p>
+                                </td>
+                            </tr>
+                        </apex:repeat>
+                    </table>
+                </apex:outputPanel>
+
+                <apex:outputPanel rendered="{!bankTransferInfo.Wire_Codes__r.size > 0 && bankTransferInfo.Case__r.BIN__r.BIN_Country__c == 'ARGENTINA'}">
+                    <table class="table2" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td colspan="2">
+                                <p>
+                                    <strong class="blueText">
+                                        <apex:outputLabel value="{!$Label.BT_Wire_Codes}" />
+                                    </strong>
+                                </p>
+                            </td>
+                        </tr>
+                        <apex:repeat value="{!bankTransferInfo.Wire_Codes__r}" var="wireCode">
+                            <tr>
+                                <td class="borderRight" width="20%">
+                                    <p>
+                                        <strong class="blueText">
+                                            <apex:outputLabel value="CUIT/CUIL" />
+                                        </strong>
+                                    </p>
+                                </td>
+                                <td>
+                                    <p>
+                                        <span class="darkText" width="80%">
+                                            <apex:outputLabel value="{!CuitCuil}" />
+                                        </span>
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td class="borderRight" width="20%">
+                                    <p>
+                                        <strong class="blueText">
+                                            <apex:outputLabel value="SWIFT CODE" />
+                                        </strong>
+                                    </p>
+                                </td>
+                                <td>
+                                    <p>
+                                        <span class="darkText" width="80%">
+                                            <apex:outputLabel value="{!wireCode.Value__c}" />
+                                        </span>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="borderRight" width="20%">
+                                    <p>
+                                        <strong class="blueText">
+                                            <apex:outputLabel value="Code Relationship" />
+                                        </strong>
+                                    </p>
+                                </td>
+                                <td>
+                                    <p>
+                                        <span class="darkText" width="80%">
+                                            <apex:outputLabel value="{!wireCode.Relationship__c}" />
+                                        </span>
+                                    </p>
+                                </td>
+                            </tr>
+                        </apex:repeat>
+                    </table>
+                </apex:outputPanel>
+
+                <br/>
+                <apex:outputText rendered="{!lan = 'es'}">
+                    <span class="darkText" style="font-size: 10pt !important;">Yo,</span>
+                </apex:outputText>
+                <apex:outputText rendered="{!lan != 'es'}">
+                    <span class="darkText" style="font-size: 10pt !important;">I,</span>
+                </apex:outputText>                
+                <strong class="darktext">
+                    <apex:outputLabel style="font-size: 11pt !important;" value="{!bankTransferInfo.BankAccountHolder_Person_First_Name__c + ' ' + bankTransferInfo.BankAccountHolder_Person_Last_Name__c}"
+                    />
+                </strong>
+                <apex:outputText rendered="{!lan = 'es'}">
+                    <span class="darkText" style="font-size: 10pt !important;">
+                        aquí otorgo mi autorización para que mi reembolso sea depositado en la cuenta bancaria detallada arriba.
+                    </span>
+                </apex:outputText>
+                <apex:outputText rendered="{!lan != 'es'}">
+                    <span class="darkText" style="font-size: 10pt !important;">
+                        here by grant my authorization for my reimbursement to be deposited into the Bank Account detailed above.
+                    </span>
+                </apex:outputText>              
+                <br/>
+                <br/>
+
+                <apex:outputText rendered="{!bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'BRAZIL' &&
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'ARGENTINA' &&
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'MEXICO' &&
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'GUATEMALA' &&
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'COLOMBIA'} &&
+                                            bankTransferInfo.Case__r.BIN__r.BIN_Country__c != 'PERU'}">
+
+                    <p class="darkText" style="text-align:right;">
+                        ____________________________
+                    </p>
+
+                    <p class="darkText" style="text-align:right;">
+                        <strong>Account Holder's Signature</strong>
+                    </p>
+                </apex:outputText>
+            </div>
+        </apex:form>
+    </body>
+</apex:page>
