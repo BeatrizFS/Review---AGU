@@ -88,3 +88,98 @@ Schema
   "status_code": "500",
   "error": "Internal Server Error"
 }
+
+### 12. POST `/cancel` and POST `/complete`
+
+Both respond `204` with no body and both take no request body, so neither runs the decryption
+step; only the response of an error is encrypted-free JSON, per the error contract.
+
+| Operation | Allowed from | Effect |
+|---|---|---|
+| `/cancel` | `Draft`, `Awaiting Start`, `Active` | `Package_Status__c = 'Cancelled'`, `Cancelled_At__c = now`, `Cancelled_By__c = context.agentContactId` |
+| `/complete` | `Draft` only | Validates completeness, then `Package_Status__c = 'Awaiting Start'`, `Completed_At__c = now`. Does **not** record agreement acceptance and does **not** require a signed agreement — the signature gates activation, not completion |
+
+`/complete` is where the contract's structural requirements are finally enforced, because a draft
+is legitimately incomplete: at least one `Core` line, `Product_Reference__c` present,
+`Amount_of_Policies__c` at least 1, both dates present with `EndDate > StartDate`, the account
+range present, and the BIN present, approved and owned by the caller's bank. Each failure yields
+`400 bad_request` naming the missing element.
+
+Neither operation is idempotent by the contract, which offers no `409`. Re-invoking `/cancel` on an
+already-cancelled package returns `400 bad_request` stating the current status, and the same for
+`/complete` outside `Draft`. This is deliberate: silently returning `204` for a no-op would hide a
+consumer defect, and the terminal states of the model forbid the transition anyway.
+
+```mermaid
+sequenceDiagram
+    participant GW as API gateway
+    participant R as BenefitsConfigAPIPackages_VEXP
+    participant B as BenefitsConfigAPIBase_V1
+    participant D as ServiceContract
+    GW->>R: POST /benefit_packages/{id}/complete
+    R->>R: dispatch on URI segments
+    R->>B: authorizeAgent(write scope)
+    B-->>R: AgentContext
+    R->>D: SELECT ... WHERE Id = :id AND AccountId = :bank (1 SOQL)
+    alt not found or other bank
+        R-->>GW: 404 not_found
+    else status is not Draft
+        R-->>GW: 400 bad_request (current status)
+    else incomplete
+        R-->>GW: 400 bad_request (missing element)
+    else
+        R->>D: update Package_Status__c = 'Awaiting Start' (as user)
+        R-->>GW: 204
+    end
+
+| Operation | SOQL | DML | JWE operations |
+|---|---|---|---|
+| POST create | 4 (agent, product, benefits, price entries) | 2 | 1 decrypt + 1 encrypt |
+| GET list | 2 (agent, packages) | 0 | 1 encrypt |
+| GET detail | 3 (agent, header, lines) | 0 | 1 encrypt |
+| PATCH | 4 | 3 (update, delete lines, insert lines) | 1 decrypt + 1 encrypt |
+| cancel / complete | 2–3 | 1 | 1 encrypt |
+| GET products | 3 | 0 | 1 encrypt |
+| GET bank / agent | 2 | 0 | 1 encrypt |
+
+Além dos exemplos discutidos outros exemplos
+@RestResource(urlMapping = '/specific/visagateway/claim_management/vexp/smart_contracts/*/complete/*')
+global with sharing class WebportalSmartContractClaimComplAPI_VEXP extends WebportalAPIBase_v1 {
+    @HttpPost
+    global static void postHandler() {
+        new WebportalSmartContractClaimComplAPI_VEXP().doPost();
+    }
+
+    public override void doPost() {
+        try {
+            WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData;
+
+            accessTokenData = WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(RestContext.Request, new Set<String> {'urn:axa.partners.specific.visagateway.claim_management.smart_contracts.write'});
+            WebportalAPITokenAuthentication_v1.ClientAccessConfiguration clientAccessConfig = WebportalAPITokenAuthentication_v1.getClientConfiguration(accessTokenData);
+
+            Account existingCustomer = WebportalApiUtility_v1.getUserByCustomerId(accessTokenData.customData.cn);
+            if(existingCustomer == null) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not found', 'Resource not found: Customer');
+            }
+
+            String tripId = RestContext.request.requestURI.substringBetween('/smart_contracts/','/complete');
+            Trip_Assistance__c tripAssistance = [SELECT Id, Status__c FROM Trip_Assistance__c WHERE Id =: tripId AND Type__c = 'CLAIM' AND Account__c =: existingCustomer.Id]??null;
+            if (tripAssistance == null) {
+                throw new WebportalApiUtility_v1.RequestAPIException(404, 'Not found', 'Resource not found: smart_contract');
+            }
+
+            tripAssistance.Status__c = 'PROCESSING_ELIGIBILITY';
+            update tripAssistance;
+
+            RestContext.response.statuscode = 204;
+        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statuscode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage(String.valueOf(ex.status_code), ex.error, ex.error_description)));
+        } catch(Exception ex) {
+            System.debug(Logginglevel.ERROR, 'Unexpected error creating the request: ' + ex.getMessage());
+            System.debug(Logginglevel.ERROR, 'Error Line: ' + ex.getLineNumber());
+            RestContext.response.statuscode = 500;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('500', 'Internal Server Error', 'Unexpected error creating the request: ' + ex.getMessage())));
+        }
+    }
+}
