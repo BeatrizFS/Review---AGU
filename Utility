@@ -239,3 +239,71 @@
 
         return theObject;
     }
+---------
+
+private static void validateCreateRequest(
+    BenefitPackage request,
+    Date startDate,
+    Date endDate
+) {
+    if (startDate == null || endDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_start_at and active_end_at must be valid dates.'
+        );
+    }
+
+    if (endDate <= startDate) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_end_at must be greater than active_start_at.'
+        );
+    }
+
+    if (
+        request.amount_of_policies == null ||
+        request.amount_of_policies < 1
+    ) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'amount_of_policies must be a positive integer.'
+        );
+    }
+
+    if (request.affected_policy_range != null) {
+        if (String.isBlank(
+            request.affected_policy_range.external_number_start_at
+        )) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'affected_policy_range.external_number_start_at is required when policy range is specified.'
+            );
+        }
+
+        if (String.isBlank(
+            request.affected_policy_range.external_number_end_at
+        )) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'affected_policy_range.external_number_end_at is required when policy range is specified.'
+            );
+        }
+    }
+}
+private static final Map<String, String> POST_REQUIRED_FIELDS = new Map<String, String>{
+    'product_reference' => 'Primitive',
+    'active_start_at' => 'Primitive',
+    'active_end_at' => 'Primitive',
+    'amount_of_policies' => 'Primitive',
+    'core_benefits' => 'List',
+    'core_benefits.benefit_id' => 'Primitive',
+    'core_benefits.name' => 'Primitive',
+    'legal_consents' => 'List',
+    'optional_benefits.benefit_id' => 'Primitive',
+    'optional_benefits.name' => 'Primitive'
+};
