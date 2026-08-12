@@ -1,0 +1,1466 @@
+@IsTest
+private class Test_BenefitsConfigAPIPackages_VEXP {
+
+    private static final String TOKEN = 'REPLACE_WITH_VALID_TEST_TOKEN';
+    private static final String BASE_URI = '/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages';
+    private static final String BENEFIT_PACKAGE_RECORD_TYPE = 'Benefit_Package';
+
+    @TestSetup
+    static void setup() {
+
+        Benefit__c coreBenefit = new Benefit__c(
+            Name = '(EMC) Emergency Medical Assistance',
+            Visa_External_Reference__c = 'LACIEMS',
+            External_Reference__c = 'EMC_Emergency_Medical_Assistance'
+        );
+
+        Benefit__c optionalBenefit = new Benefit__c(
+            Name = 'Cellphone Protection',
+            Visa_External_Reference__c = 'LACCELPRO',
+            External_Reference__c = 'Cellphone_Protection',
+            Benefit_Description__c = 'Optional benefit description'
+        );
+
+        insert new List<Benefit__c>{
+            coreBenefit,
+            optionalBenefit
+        };
+
+        Pricebook2 benefitsPricebook = new Pricebook2(
+            Name = 'Visa Benefits',
+            IsActive = true
+        );
+        insert benefitsPricebook;
+
+        Product__c visaProduct = new Product__c(
+            Name = 'Visa Classic',
+            Type__c = 'C - Credit',
+            Country__c = 'BRAZIL',
+            Category__c = 'Consumer'
+        );
+        insert visaProduct;
+
+        Product2 coreProduct = new Product2(
+            Name = '(EMC) Emergency Medical Assistance',
+            Benefit__c = coreBenefit.Id,
+            Family = 'Benefit',
+            IsActive = true
+        );
+
+        Product2 optionalProduct = new Product2(
+            Name = 'Cellphone Protection',
+            Benefit__c = optionalBenefit.Id,
+            Family = 'Benefit',
+            IsActive = true
+        );
+
+        insert new List<Product2>{
+            coreProduct,
+            optionalProduct
+        };
+
+        insert new List<PricebookEntry>{
+            new PricebookEntry(
+                Pricebook2Id = Test.getStandardPricebookId(),
+                Product2Id = coreProduct.Id,
+                UnitPrice = 1020,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = Test.getStandardPricebookId(),
+                Product2Id = optionalProduct.Id,
+                UnitPrice = 1020,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = coreProduct.Id,
+                UnitPrice = 10,
+                IsActive = true
+            ),
+            new PricebookEntry(
+                Pricebook2Id = benefitsPricebook.Id,
+                Product2Id = optionalProduct.Id,
+                UnitPrice = 50,
+                IsActive = true
+            )
+        };
+
+        Country__c brazil = new Country__c(
+            Name = 'BRAZIL',
+            Code__c = 'BR'
+        );
+        insert brazil;
+
+        Product2 visaClassicProduct2 = new Product2(
+            Name = 'Visa Classic',
+            Card_Product_Id__c = 'I',
+            Card_Type_Code__c = 'C',
+            IsActive = true
+        );
+        insert visaClassicProduct2;
+
+        insert new Product__c(
+            Name = 'Visa Classic',
+            Type__c = 'C - Credit',
+            Country__c = 'BRAZIL',
+            Category__c = 'Consumer',
+            Product__c = visaClassicProduct2.Id,
+            Country_LKP__c = brazil.Id
+        );
+
+        Id benefitPackageRecordTypeId = Schema.SObjectType.ServiceContract.getRecordTypeInfosByDeveloperName().get(BENEFIT_PACKAGE_RECORD_TYPE).getRecordTypeId();
+
+        ServiceContract benefitPackage = new ServiceContract(
+            RecordTypeId = benefitPackageRecordTypeId,
+            Name = 'Benefit Package Test',
+            StartDate = Date.today(),
+            EndDate = Date.today().addYears(1),
+            Pricebook2Id = benefitsPricebook.Id,
+            Product_Reference__c = 'I_C_BR',
+            Package_Status__c = 'Draft',
+            Amount_of_Policies__c = 100,
+            Policy_Range_Start__c = '1000',
+            Policy_Range_End__c = '1100',
+            Legal_Consent_Code__c = 'legal_consent_I_understand',
+            Legal_Consent_Confirmed__c = true,
+            Legal_Consent_Date__c = Datetime.newInstanceGmt(Date.today(), Time.newInstance(10, 0, 0, 0))
+        );
+
+        insert benefitPackage;
+
+        insert new List<ContractLineItem>{
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                PricebookEntryId = getPricebookEntry(
+                    benefitsPricebook.Id,
+                    coreProduct.Id
+                ).Id,
+                Benefit_Category__c = 'Core',
+                Quantity = 1,
+                UnitPrice = 0
+            ),
+            new ContractLineItem(
+                ServiceContractId = benefitPackage.Id,
+                PricebookEntryId = getPricebookEntry(
+                    benefitsPricebook.Id,
+                    optionalProduct.Id
+                ).Id,
+                Benefit_Category__c = 'Optional',
+                Quantity = 1,
+                UnitPrice = 50
+            )
+        };
+    }
+
+    @IsTest
+    static void testSuccessGetBenefitPackages() {
+        executeGet(BASE_URI, true);
+
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        List<Object> response =
+            (List<Object>) JSON.deserializeUntyped(
+                RestContext.response.responseBody.toString()
+            );
+
+        System.assertEquals(1, response.size());
+
+        Map<String, Object> item = (Map<String, Object>) response[0];
+
+        System.assertEquals('Draft', item.get('status'));
+        System.assertEquals('I_C_BR', item.get('product_reference'));
+        System.assertEquals('100', String.valueOf(item.get('amount_of_policies')));
+    }
+
+    @IsTest
+    static void testSuccessGetBenefitPackageDetails() {
+        ServiceContract contract = getBenefitPackage();
+
+        executeGet(BASE_URI + '/' + contract.Id, true);
+
+        System.assertEquals(200, RestContext.response.statusCode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackage response =
+            (BenefitsConfigAPIPackages_VEXP.BenefitPackage)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackage.class
+            );
+
+        System.assertEquals(contract.Id, response.benefit_package_id);
+        System.assertEquals('Draft', response.status);
+        System.assertEquals('I_C_BR', response.product_reference);
+        System.assertEquals(100, response.amount_of_policies);
+
+        System.assertNotEquals(
+            null,
+            response.affected_policy_range
+        );
+
+        System.assertEquals(
+            '1000',
+            response.affected_policy_range.external_number_start_at
+        );
+
+        System.assertEquals(
+            '1100',
+            response.affected_policy_range.external_number_end_at
+        );
+
+        System.assertEquals(1, response.core_benefits.size());
+        System.assertEquals(
+            'LACIEMS',
+            response.core_benefits[0].benefit_id
+        );
+
+        System.assertEquals(
+            '(EMC) Emergency Medical Assistance',
+            response.core_benefits[0].name
+        );
+
+        System.assertEquals(1, response.optional_benefits.size());
+        System.assertEquals(
+            'LACCELPRO',
+            response.optional_benefits[0].benefit_id
+        );
+
+        System.assertEquals(
+            'Cellphone Protection',
+            response.optional_benefits[0].name
+        );
+
+        System.assertEquals(
+            'Optional benefit description',
+            response.optional_benefits[0].description
+        );
+
+        System.assertEquals(1, response.legal_consents.size());
+        System.assertEquals(
+            'legal_consent_I_understand',
+            response.legal_consents[0].code
+        );
+
+        System.assertEquals(
+            true,
+            response.legal_consents[0].is_confirmed
+        );
+
+        System.assertNotEquals(
+            null,
+            response.legal_consents[0].consented_at
+        );
+    }
+
+    @IsTest
+    static void testUnauthorizedGetBenefitPackages() {
+        executeGet(BASE_URI, false);
+
+        System.assertEquals(401, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testUnauthorizedGetBenefitPackageDetails() {
+        ServiceContract contract = getBenefitPackage();
+
+        executeGet(BASE_URI + '/' + contract.Id, false);
+
+        System.assertEquals(401, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailGetBenefitPackageDetailsNotFound() {
+        executeGet(
+            BASE_URI + '/001000000000000AAA',
+            true
+        );
+
+        System.assertEquals(404, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage error =
+            getErrorResponse();
+
+        System.assertEquals('404', error.status_code);
+        System.assertEquals('Not Found', error.error);
+        System.assertEquals(
+            'The searched resource was not found.',
+            error.error_description
+        );
+    }
+
+    @IsTest
+    static void testFailGetBenefitPackagesWithInvalidStartIndex() {
+        setupRequest('GET', BASE_URI, null, true);
+
+        RestContext.request.params.put(
+            'start_index',
+            '2001'
+        );
+
+        RestContext.request.params.put(
+            'max_results',
+            '100'
+        );
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stopTest();
+
+        System.assertEquals(400, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage error =
+            getErrorResponse();
+
+        System.assertEquals('400', error.status_code);
+        System.assertEquals(
+            'start_index cannot be greater than 2000.',
+            error.error_description
+        );
+    }
+
+    // ============================================================
+    // POST - SUCCESS
+    // ============================================================
+
+    @IsTest
+    static void testSuccessCreateBenefitPackage() {
+        executePost(validRequest());
+
+        System.assertEquals(201, RestContext.response.statusCode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            getPostResponse();
+
+        System.assertNotEquals(
+            null,
+            response.benefit_package_id
+        );
+
+        ServiceContract contract = [
+            SELECT
+                Id,
+                Package_Status__c,
+                Product_Reference__c,
+                Product__c,
+                StartDate,
+                EndDate,
+                Term,
+                Amount_of_Policies__c,
+                Policy_Range_Start__c,
+                Policy_Range_End__c,
+                Legal_Consent_Code__c,
+                Legal_Consent_Confirmed__c,
+                Legal_Consent_Date__c,
+                Pricebook2Id
+            FROM ServiceContract
+            WHERE Id = :response.benefit_package_id
+        ];
+
+        System.assertEquals(
+            'Draft',
+            contract.Package_Status__c
+        );
+
+        System.assertEquals(
+            'I_C_BR',
+            contract.Product_Reference__c
+        );
+
+        System.assertEquals(
+            Date.newInstance(2026, 9, 1),
+            contract.StartDate
+        );
+
+        System.assertEquals(
+            Date.newInstance(2027, 9, 1),
+            contract.EndDate
+        );
+
+        System.assertEquals(12, contract.Term);
+        System.assertEquals(
+            100,
+            Integer.valueOf(contract.Amount_of_Policies__c)
+        );
+
+        System.assertEquals(
+            '1000',
+            contract.Policy_Range_Start__c
+        );
+
+        System.assertEquals(
+            '1100',
+            contract.Policy_Range_End__c
+        );
+
+        System.assertEquals(
+            'legal_consent_I_understand',
+            contract.Legal_Consent_Code__c
+        );
+
+        System.assertEquals(
+            true,
+            contract.Legal_Consent_Confirmed__c
+        );
+
+        System.assertNotEquals(
+            null,
+            contract.Legal_Consent_Date__c
+        );
+
+        System.assertNotEquals(null, contract.Product__c);
+        System.assertNotEquals(null, contract.Pricebook2Id);
+
+        List<ContractLineItem> lineItems = [
+            SELECT
+                Benefit_Category__c,
+                Quantity,
+                UnitPrice
+            FROM ContractLineItem
+            WHERE ServiceContractId = :contract.Id
+            ORDER BY Benefit_Category__c
+        ];
+
+        System.assertEquals(2, lineItems.size());
+
+        System.assertEquals(
+            'Core',
+            lineItems[0].Benefit_Category__c
+        );
+
+        System.assertEquals(
+            0,
+            lineItems[0].UnitPrice
+        );
+
+        System.assertEquals(
+            100,
+            Integer.valueOf(lineItems[0].Quantity)
+        );
+
+        System.assertEquals(
+            'Optional',
+            lineItems[1].Benefit_Category__c
+        );
+
+        System.assertEquals(
+            50,
+            lineItems[1].UnitPrice
+        );
+
+        System.assertEquals(
+            100,
+            Integer.valueOf(lineItems[1].Quantity)
+        );
+    }
+
+    @IsTest
+    static void testSuccessCreateBenefitPackageWithoutOptionalBenefits() {
+        Map<String, Object> body = validRequestMap();
+
+        body.remove('optional_benefits');
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(201, RestContext.response.statusCode);
+
+        BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse response =
+            getPostResponse();
+
+        List<ContractLineItem> lineItems = [
+            SELECT Benefit_Category__c
+            FROM ContractLineItem
+            WHERE ServiceContractId = :response.benefit_package_id
+        ];
+
+        System.assertEquals(1, lineItems.size());
+        System.assertEquals(
+            'Core',
+            lineItems[0].Benefit_Category__c
+        );
+    }
+
+    @IsTest
+    static void testSuccessCreateBenefitPackageWithEmptyOptionalBenefits() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'optional_benefits',
+            new List<Object>()
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(201, RestContext.response.statusCode);
+    }
+
+    // ============================================================
+    // POST - OPTIONAL BENEFITS VALIDATION
+    // ============================================================
+
+    @IsTest
+    static void testFailOptionalBenefitWithoutBenefitId() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>()
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage error =
+            getErrorResponse();
+
+        System.assertEquals('400', error.status_code);
+        System.assertEquals(
+            'optional_benefits.benefit_id is required when optional_benefits is specified.',
+            error.error_description
+        );
+    }
+
+    @IsTest
+    static void testFailOptionalBenefitWithBlankBenefitId() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => ''
+                }
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailOptionalBenefitWithNullBenefitId() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'optional_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => null
+                }
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    // ============================================================
+    // POST - REQUIRED FIELDS
+    // ============================================================
+
+    @IsTest
+    static void testFailMissingProductReference() {
+        assertMissingField('product_reference');
+    }
+
+    @IsTest
+    static void testFailMissingActiveStartAt() {
+        assertMissingField('active_start_at');
+    }
+
+    @IsTest
+    static void testFailMissingActiveEndAt() {
+        assertMissingField('active_end_at');
+    }
+
+    @IsTest
+    static void testFailMissingAmountOfPolicies() {
+        assertMissingField('amount_of_policies');
+    }
+
+    @IsTest
+    static void testFailMissingCoreBenefits() {
+        assertMissingField('core_benefits');
+    }
+
+    @IsTest
+    static void testFailMissingLegalConsents() {
+        assertMissingField('legal_consents');
+    }
+
+    @IsTest
+    static void testFailCoreBenefitWithoutBenefitId() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>()
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    // ============================================================
+    // POST - VALIDATION
+    // ============================================================
+
+    @IsTest
+    static void testFailAmountOfPoliciesZero() {
+        assertInvalidField('amount_of_policies', 0);
+    }
+
+    @IsTest
+    static void testFailAmountOfPoliciesNegative() {
+        assertInvalidField('amount_of_policies', -1);
+    }
+
+    @IsTest
+    static void testFailEndDateEqualsStartDate() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put('active_end_at', '2026-09-01');
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailEndDateBeforeStartDate() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put('active_start_at', '2027-09-01');
+        body.put('active_end_at', '2026-09-01');
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailInvalidStartDate() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put('active_start_at', 'invalid-date');
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailPolicyRangeMissingStart() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'affected_policy_range',
+            new Map<String, Object>{
+                'external_number_end_at' => '1100'
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailPolicyRangeMissingEnd() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'affected_policy_range',
+            new Map<String, Object>{
+                'external_number_start_at' => '1000'
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    // ============================================================
+    // POST - RESOURCE / DATA
+    // ============================================================
+
+    @IsTest
+    static void testFailProductNotFound() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'product_reference',
+            'PRODUCT-NOT-FOUND'
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailBenefitNotFound() {
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'BENEFIT-NOT-FOUND'
+                }
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailProduct2NotFoundForBenefit() {
+        insert new Benefit__c(
+            Name = 'Benefit Without Product',
+            Visa_External_Reference__c = 'NO-PRODUCT-REF',
+            External_Reference__c = 'Benefit_Without_Product'
+        );
+
+        Map<String, Object> body = validRequestMap();
+
+        body.put(
+            'core_benefits',
+            new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'NO-PRODUCT-REF'
+                }
+            }
+        );
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(400, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailInvalidJson() {
+        executePost(
+            '{"product_reference":"I_C_BR"'
+        );
+
+        System.assertEquals(400, RestContext.response.statusCode);
+
+        WebportalApiUtility_v1.ErrorMessage error =
+            getErrorResponse();
+
+        System.assertEquals('400', error.status_code);
+        System.assertEquals('Bad Request', error.error);
+    }
+
+    @IsTest
+    static void testUnauthorizedPost() {
+        setupRequest('POST', BASE_URI, validRequest(), false);
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+
+        System.assertEquals(401, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailInvalidResourcePath() {
+        executePostAllowingException(
+            BASE_URI + '/001/cancel/extra'
+        );
+
+        System.assertEquals(404, RestContext.response.statusCode);
+    }
+
+    @IsTest
+    static void testFailInvalidGetResourcePath() {
+        executeGetAllowingException(
+            BASE_URI + '/invalid/extra',
+            true
+        );
+
+        System.assertEquals(404, RestContext.response.statusCode);
+    }
+
+    // ============================================================
+    // HELPERS - REQUEST
+    // ============================================================
+
+    private static void setupRequest(
+        String method,
+        String uri,
+        String body,
+        Boolean authenticated
+    ) {
+        RestContext.request = new RestRequest();
+        RestContext.request.httpMethod = method;
+        RestContext.request.requestURI = uri;
+
+        if (authenticated) {
+            RestContext.request.headers.put(
+                'authorization2',
+                'Bearer ' + TOKEN
+            );
+        }
+
+        if (body != null) {
+            RestContext.request.requestBody =
+                Blob.valueOf(body);
+        }
+
+        RestContext.response = new RestResponse();
+    }
+
+    private static void executePost(String body) {
+        setupRequest(
+            'POST',
+            BASE_URI,
+            body,
+            true
+        );
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doPost();
+        Test.stopTest();
+    }
+
+    private static void executePostAllowingException(
+        String uri
+    ) {
+        setupRequest(
+            'POST',
+            uri,
+            null,
+            true
+        );
+
+        Test.startTest();
+
+        try {
+            BenefitsConfigAPIPackages_VEXP.doPost();
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode =
+                ex.status_code;
+        }
+
+        Test.stopTest();
+    }
+
+    private static void executeGet(
+        String uri,
+        Boolean authenticated
+    ) {
+        setupRequest(
+            'GET',
+            uri,
+            null,
+            authenticated
+        );
+
+        Test.startTest();
+        BenefitsConfigAPIPackages_VEXP.doGet();
+        Test.stopTest();
+    }
+
+    private static void executeGetAllowingException(
+        String uri,
+        Boolean authenticated
+    ) {
+        setupRequest(
+            'GET',
+            uri,
+            null,
+            authenticated
+        );
+
+        Test.startTest();
+
+        try {
+            BenefitsConfigAPIPackages_VEXP.doGet();
+        } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode =
+                ex.status_code;
+        }
+
+        Test.stopTest();
+    }
+
+    // ============================================================
+    // HELPERS - REQUEST BODY
+    // ============================================================
+
+    private static String validRequest() {
+        return JSON.serialize(validRequestMap());
+    }
+
+    private static Map<String, Object> validRequestMap() {
+        return new Map<String, Object>{
+            'product_reference' => 'I_C_BR',
+            'active_start_at' => '2026-09-01',
+            'active_end_at' => '2027-09-01',
+            'amount_of_policies' => 100,
+
+            'affected_policy_range' => new Map<String, Object>{
+                'external_number_start_at' => '1000',
+                'external_number_end_at' => '1100'
+            },
+
+            'core_benefits' => new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'LACIEMS'
+                }
+            },
+
+            'optional_benefits' => new List<Object>{
+                new Map<String, Object>{
+                    'benefit_id' => 'LACCELPRO'
+                }
+            },
+
+            'legal_consents' => new List<Object>{
+                new Map<String, Object>{
+                    'code' => 'legal_consent_I_understand',
+                    'is_confirmed' => true,
+                    'consented_at' =>
+                        '2026-08-11T10:30:45Z'
+                }
+            }
+        };
+    }
+
+    private static void assertMissingField(
+        String fieldName
+    ) {
+        Map<String, Object> body =
+            validRequestMap();
+
+        body.remove(fieldName);
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected 400 when ' +
+            fieldName +
+            ' is missing.'
+        );
+    }
+
+    private static void assertInvalidField(
+        String fieldName,
+        Object value
+    ) {
+        Map<String, Object> body =
+            validRequestMap();
+
+        body.put(fieldName, value);
+
+        executePost(JSON.serialize(body));
+
+        System.assertEquals(
+            400,
+            RestContext.response.statusCode,
+            'Expected 400 for invalid ' +
+            fieldName +
+            '.'
+        );
+    }
+
+    private static WebportalApiUtility_v1.ErrorMessage
+    getErrorResponse() {
+        return (WebportalApiUtility_v1.ErrorMessage)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                WebportalApiUtility_v1.ErrorMessage.class
+            );
+    }
+
+    private static BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse
+    getPostResponse() {
+        return (BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse)
+            JSON.deserialize(
+                RestContext.response.responseBody.toString(),
+                BenefitsConfigAPIPackages_VEXP.BenefitPackagePostResponse.class
+            );
+    }
+
+    private static ServiceContract getBenefitPackage() {
+        return [
+            SELECT Id
+            FROM ServiceContract
+            WHERE RecordType.DeveloperName =
+                :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
+    }
+
+    private static PricebookEntry getPricebookEntry(
+        Id pricebookId,
+        Id productId
+    ) {
+        return [
+            SELECT Id
+            FROM PricebookEntry
+            WHERE Pricebook2Id = :pricebookId
+            AND Product2Id = :productId
+            AND IsActive = true
+            LIMIT 1
+        ];
+    }
+}
+
+------
+Ajuste a indentação dessa classe está muito vertical além disso considere essa classe de teste como base para os ajuste e melhorias, tenho que segui o padrão da org
+@isTest
+public class Test_WebportalCustomerAPI_V3 {
+    private static String token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImprdSI6Imh0dHBzOi8vbWFhbS1zdGcuYXhhLmNvbS9tYWFtL3YxL2p3a3M_a2lkPTUyNUIyRDFFRjlEMDY0OTVBMzJFRDQzNkUyRkQ0NDBGODZENDY5M0IiLCJraWQiOiI1MjVCMkQxRUY5RDA2NDk1QTMyRUQ0MzZFMkZENDQwRjg2RDQ2OTNCIiwieDV1IjoiaHR0cHM6Ly9tYWFtLXN0Zy5heGEuY29tL21hYW0vdjEveDUwOS81MjVCMkQxRUY5RDA2NDk1QTMyRUQ0MzZFMkZENDQwRjg2RDQ2OTNCIiwieDV0IjoiNTI1QjJEMUVGOUQwNjQ5NUEzMkVENDM2RTJGRDQ0MEY4NkQ0NjkzQiJ9.ew0KCSJzdWIiOiB7InZhbHVlIjogImNlM2Y0NmVlLTU3ZTQtNDA1Ni1hNmM0LTM3MjM1ZGVhZGJmOSJ9LA0KCSJhdWQiOiAiNmQwOWIxYWIiLA0KCSJleHAiOiAxNTU3NDE1MjUwLA0KCSJpYXQiOiAxNTU3NDExNjUwLA0KCSJuYmYiOiAxNTU3NDExNjQwLA0KCSJpc3MiOiAiaHR0cHM6Ly9tYWFtLXN0Zy5heGEuY29tIiwNCgkiYW1yIjogInB3ZCIsDQoJImN1c3RvbURhdGEiOiB7DQoJImxvZ2luIiA6ICJhdXRvLnVhdC50ZXN0MDAxQHlvcG1haWwuY29tIiwNCgkiY24iIDogImNlM2Y0NmVlLTU3ZTQtNDA1Ni1hNmM0LTM3MjM1ZGVhZGJmOSIsDQoJImZpcnN0TmFtZSIgOiAiQXV0byBUZXN0IiwNCgkibGFzdE5hbWUiIDogIlVBVCIsDQoJImVtYWlsIiA6ICJhdXRvLnVhdC50ZXN0MDAxQHlvcG1haWwuY29tIiwNCgkiYjJjX3Njb3BlIiA6ICJBWEEtQVNTSVNUQU5DRS1WSVNBIg0KfSwNCgkic2NvcGUiOiAidXJuOmF4YS5wYXJ0bmVycy5zYWxlcy5jZXJ0aWZpY2F0ZXMuY3JlYXRpb25fcmVxdWVzdCB1cm46YXhhLnBhcnRuZXJzLmluc3VyYW5jZS5jbGFpbXMud3JpdGUgdXJuOmF4YS5wYXJ0bmVycy5zYWxlcy5pbmRpdmlkdWFsLmNlcnRpZmljYXRlcy53cml0ZSB1cm46YXhhLnBhcnRuZXJzLnNwZWNpZmljLnZpc2FnYXRld2F5LmN1c3RvbWVycy5yZWFkX29ubHkgdXJuOmF4YS5wYXJ0bmVycy5zcGVjaWZpYy52aXNhZ2F0ZXdheS5jdXN0b21lcnMud3JpdGUiLA0KCSJub25jZSI6ICI1OTExNGEzNC04NjU3LTQwYjQtOWNmNS0yM2NjMDA0MWZmOGYiDQp9.J31gWHfqVtDxlko6suiUJZg5oDTLyYH-fl2TpQ346WZYiwlHylM6yU8aGEzhwlRge7EG4U6GMsS6tAyg_bhmUMI2taqQcwnkdvxA50PlyWyZZJA3694AOz16e0X1OLj5OYtgq4wEArhnfNaPjiQx5r5Wrx-97IWQM6DexY-P7sAEEeHlFd4ZHLOqD_CoNRgPW2Gdg3ETeNWwiWWl3vHOFSxXK3Jb-cs_ncbixC4EDebNBnSN7EGqnSqWcBe0TvVs-zXVZoGm_leyovTo_BrCViO6KfUFJWDvEIk07WVLxPSp1xIkOBCSfNBcYZTBGkeM7XMOxmTqwk2RDiveai4Z6oJQr7qh4K1Ecq8tdkg-4MQGNvYFSN0q9odm651m42XLo38iKONz7NM9nmNS3tmD3Iwy6KljKFW_U3-BD2LnrLeqB1IUklr6EIMOZkr60RtCi5QsxZnKDKwYibtu5kcFdfUyxwk_KUZ7Z25mK6dbmTfv-KJFYNvV_sNB4EACqf5nQ5rYH-SvDM85w_1APhEPYPTFWg75gus3mmKTf9m8s7WkT7puU7yM3GT3pGWys39_H4Mr-RX27VFgSOE-DNpjPxGm8MW6Sgg6r-nMsCL_HyWXNa1VpOmjTPMF-BDMHUe-UjDNU7wBqsysYL-dQWcMCg09KHb9qGiRWtqBAZsoYKs';
+	private static String encryptedJSON = '{"encrypted_data": "eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZDQkMtSFM1MTIifQ.guLMJzM3p65774GHREBnEYNDcyD7olhWCmIBSKWKab/UO4w/6LF7gF5K08K3oGUwTHVaO1/DQqmjpG2qoYMH27VUmcLW63YrMoaTxZVcu3cErnWDMLoUCixxUV5Rahv3U7Y11fOv0YvvgMmS3Qzc8oIghxClzatXv7uTJU51Ls7tnvcTzIwvjWcMjEgrW1yaHnRMuddUdJ7zi0oH+e6riPKGhIX/afdShFFFSBCVpOemeamrhfEPCdybSGUP/qR11W6hbuTJAmMGnPXrWsf5T/7oRL3FHmJmrzbLwcZP/4eCC8bXYRtQVE408XwU1SeW7tGnSUau0uvLq6UQ9E7E2w==.mWQx4A2c4ZOZby2Dbs02Jw.PeJsayLaJKaJfROsQYTJsXp8H6rmGxdu+TLhQlISmLEK/Vb3hYDtvZcYfnIFRA6i07SdfbU1ufxq/33I/RjFzZRK8mhHSRc66HFtuKnIG8O3igT6tCeb7zlyNVgG3IZYoP2L03+XFP1tQ/i3X3HCY8H6hjvZyb5gGSbQmQF9tBomMrA4+fd7fHGyNZzkyZ8HQbz/q27jMbVcszAnkzzMtKf1ILEmOsMlKuV+oUxCbLC5sVpiZlLioUi8I7IDXl0LtTNW5l3hyIh4tAQJ5i6B01wijfxASBUZjkk0nkVhplbojR6vS1NRbRUx+jpQw1MS208JhLe4HhYi0uD0BpsWg4LIPCc4rbfsVfrfk2rutS908Zd+wLaJGA1apzEsdxIuXPaDkDpoTp672EmPpe9tAL5Uyu9gFLGySyZl/tJ4CutIHpeW3Uxx2Gcxbs7c/o9Q8daYsaKBqdXBQUJ9wqozp5SRP+MIYlTDZuN5wwXEcxZG6gfCdxHedF/hIQh7Q3pZ684glUv2vJdMX9iaCCIMIu1pwBw7NJjvxsDinSJZ7IOZbi4EAtA7SSoSvKaEpmJ4xQt8nPEW1vNwfk01TbSVSeQVFclv26+6mk3oJv2+Zl1+OyxGFu1t7p64Pm8frUA6.gKco61K5SCiLfmJ7GrrF2RaXSI2GWCcQiG4JK1aU9Zo="}';
+	private static String requestBodyFirstNameLong = '{"registrations":[{"value":"915.796.860-87","registration_type":"CPF"}],"phone":{"phone_type":"Account Phone","number":"30036969","international_prefix":"55"},"person":{"title":"MR","nationalities":["BR"],"last_name":"3�","gender":"ML","first_name":"Cleyitinhoooooooooooooozinhoooooooooooooo","birth_date":"2000-01-01"},"partner_customer_id":"0001","email":"test.cleyitinho-axa@yopmail.com","address":{"street_address":"Rua da Aurora","state":"PE","postal_code":"50060-010","locality":"Recife","country":"BR"}}';
+
+	private static String requestBodyLastNameLong = '{"registrations":[{"value":"915.796.860-87","registration_type":"CPF"}],"phone":{"phone_type":"Account Phone","number":"30036969","international_prefix":"55"},"person":{"title":"MR","nationalities":["BR"],"last_name":"Terceiro De Almeida Francisco Sales Souza Alcantara Miranda Albuquerque Nascimento 3�","gender":"ML","first_name":"Cleyitinho","birth_date":"2000-01-01"},"partner_customer_id":"0001","email":"test.cleyitinho-axa@yopmail.com","address":{"street_address":"Rua da Aurora","state":"PE","postal_code":"50060-010","locality":"Recife","country":"BR"}}';
+
+
+	private static final Map<String, Customer_Notifications_Mappings__mdt> customerNotificationMap = new Map<String, Customer_Notifications_Mappings__mdt>();
+    static {
+        List<Customer_Notifications_Mappings__mdt> customerNotificationStructures = [SELECT DeveloperName, Title_EN_US__c, Push_Title_EN_US__c, Content_EN_US__c, Push_Content_EN_US__c, Title_ES__c, Push_Title_ES__c, Content_ES__c, Push_Content_ES__c, Title_PT_BR__c, Push_Title_PT_BR__c, Push_Content_PT_BR__c, Content_PT_BR__c FROM Customer_Notifications_Mappings__mdt WHERE Related_Object_API_Name__c = 'Account'];
+        for(Customer_Notifications_Mappings__mdt structure : customerNotificationStructures) {
+            customerNotificationMap.put(structure.DeveloperName, structure);
+        }
+    }
+
+	@TestSetup
+	static void initialize(){
+		API_Client__c partner = new API_Client__c();
+		partner.Client_Code__c = '0001';
+		insert partner;
+
+		RecordType personAccountRecordType =  [SELECT Id FROM RecordType WHERE Name = 'Person Account' and SObjectType = 'Account'];
+
+		Account newPersonAccount = new Account();
+        newPersonAccount.FirstName =  'SFDC';
+        newPersonAccount.LastName  = 'Team';
+        newPersonAccount.RecordTypeid = personAccountRecordType.id;
+        newPersonAccount.PersonEmail = 'teste@teste.com';
+        newPersonAccount.Customer_Identifier__c = 'f02d4c4d-612c-415f-b5a3-2a30ba1f97eb';
+        insert newPersonAccount;
+
+		Client_Key__c key = new Client_Key__c();
+		key.Name = '6d09b1ab';
+		key.ClientID__c = '6d09b1ab';
+		key.Mac_Key__c = '3F9763B731BA68F3BF8C4F1B46F69B88';
+		key.AES_Key__c = '810774A15103144F88464D735E7FB05B';
+		key.AES_IV__c = 'EA2B9B146C2CE3B85AFDA00729FEED24';
+		key.CEK_Scheme__c = 'dir';
+		key.Encryption_Scheme__c = 'A128CBC-HS256';
+		insert key;
+		
+		initializeClientsConfig();
+
+	}
+
+    public static void initializeClientsConfig(){
+    	List<api_client_access__c> clientConfigurations = new List<api_client_access__c>();
+    	clientConfigurations.add(new api_client_access__c(Name='Main Portal Web - OIDC - TEST',Issuer__c='https://maam-stg.axa.com', client_id__c='4a3b4189',json_config__c='{"access_type":"all_issuers","partner_code":"visa"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Main Portal Web - ROC - TEST 1',Issuer__c='https://maam-stg.axa.com', client_id__c='6d09b1ab',json_config__c='{"access_type":"all_issuers","partner_code":"visa"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='YellowPepper (AXA) - CC - TEST',Issuer__c='https://maam-stg.axa.com', client_id__c='158bb061',json_config__c='{"access_type":"issuer_list","issuer_list":["BANCO SANTANDER S.A.","BANCO SANTANDER PERU S.A."],"partner_code":"santander"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Pepito Bank',Issuer__c='https://maam-stg.axa.com', client_id__c='22233344',json_config__c='{"access_type":"issuer_list","issuer_list":["BANCO PEPITO S.A."],"partner_code":"pepito"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Wrong_json_format',Issuer__c='https://maam-stg.axa.com', client_id__c='66600001',json_config__c='{access_type":"issuer_list","issuer_list":["BANCO SANTANDER S.A.","BANCO SANTANDER PERU S.A."],"partner_code":"santander"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Missing_Access_type',Issuer__c='https://maam-stg.axa.com', client_id__c='66600002',json_config__c='{"issuer_list":["BANCO SANTANDER S.A.","BANCO SANTANDER PERU S.A."],"partner_code":"santander"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Missing Issuer_List',Issuer__c='https://maam-stg.axa.com', client_id__c='66600003',json_config__c='{"access_type":"issuer_list","partner_code":"santander"}'));
+    	clientConfigurations.add(new api_client_access__c(Name='Missing Partner Code',Issuer__c='https://maam-stg.axa.com', client_id__c='66600004',json_config__c='{"access_type":"issuer_list","issuer_list":["BANCO SANTANDER S.A.","BANCO SANTANDER PERU S.A."]}'));
+    	insert clientConfigurations;
+    }
+
+
+	@isTest static WebportalCustomerAPI_V3.Customer getBasePostModel() {
+        WebportalCustomerAPI_V3.Customer newCustomer = WebportalCustomerAPI_V3.createCustomerMock();
+		return newCustomer;
+	}
+
+	// Successful Scenarios
+	@isTest static void createNewAccount() {
+		String jsonRequest = JSON.serialize( WebportalCustomerAPI_V3.createCustomerMock() );
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response= res;
+
+		Test.starttest();
+		WebportalCustomerAPI_V3.doPost();
+		Test.stoptest();
+
+		System.assertEquals(201, RestContext.response.statuscode);
+
+		Account acc = [SELECT Customer_Identifier__c, FirstName, LastName FROM Account ORDER BY CreatedDate DESC LIMIT 1];
+		System.assertEquals('SFDC', acc.FirstName);
+		System.assertEquals('Team', acc.LastName);
+		System.assertEquals('f02d4c4d-612c-415f-b5a3-2a30ba1f97eb', acc.Customer_Identifier__c);
+
+		List<Customer_Notification__c> notification = [SELECT Id, Customer__c, Related_To__c, Title__c, Content__c, Push_Title__c, Push_Content__c FROM Customer_Notification__c];
+        System.assertEquals(1, notification.size(), 'One Customer Notification records must be created');
+		// System.assertEquals(acc.Id, notification[0].Customer__c, 'Customer__c must match for creation notificaiton');
+        System.assertEquals('CUSTOMER_NOTIFICATION', notification[0].Related_To__c, 'Related_to__c must equals to CUSTOMER_NOTIFICATION');
+        System.assertEquals(customerNotificationMap.get('Customer_Creation').Title_EN_US__c, notification[0].Title__c, 'Title__c must match for creation notification');
+        System.assertEquals(customerNotificationMap.get('Customer_Creation').Push_Title_EN_US__c, notification[0].Push_Title__c, 'Push_Title__c must match for creation notification');
+
+		String creationContent = 'Your Visa Benefits Portal registration is complete. Start exploring and enjoying your Visa card benefits.';
+		System.assertEquals(creationContent, notification[0].Content__c, 'Content__c must match for creation notification');
+		System.assertEquals(creationContent, notification[0].Push_Content__c, 'Push_Content__c must match for creation notification');
+	}
+
+	@isTest static void getAccount() {
+		String jsonRequest = JSON.serialize( WebportalCustomerAPI_V3.createCustomerMock() );
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		req.requestBody = Blob.valueof(jsonRequest);
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();
+
+		Account acc = [Select Customer_Identifier__c from Account];
+
+		RestContext.request = new RestRequest();
+		RestContext.response = new RestResponse();
+
+		RestContext.request.requestURI = '/specific/visagateway/v3/customers/' + acc.Customer_Identifier__c;
+		RestContext.request.httpMethod = 'GET';
+		RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+		
+		WebportalCustomerAPI_V3.doGet();
+		System.assertEquals(200, RestContext.response.statuscode);
+
+		Test.stoptest();
+	}
+
+	@isTest static void updateAccount() {
+		String jsonRequest = JSON.serialize( WebportalCustomerAPI_V3.createCustomerMock() );
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();
+
+		Account acc = [SELECT Customer_Identifier__c, FirstName FROM Account ORDER BY CreatedDate DESC LIMIT 1];
+
+		RestContext.request = new RestRequest();
+		RestContext.response = new RestResponse();
+
+		RestContext.request.requestURI = '/specific/visagateway/v3/customers/' + acc.Customer_Identifier__c;
+		RestContext.request.httpMethod = 'PATCH';
+		RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+
+		RestContext.request.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+		
+		WebportalCustomerAPI_V3.doPatch();
+		Test.stoptest();
+
+		System.assertEquals(204, RestContext.response.statuscode);
+
+		List<Customer_Notification__c> notification = [SELECT Id, Customer__c, Related_To__c, Title__c, Content__c, Push_Title__c, Push_Content__c FROM Customer_Notification__c ORDER BY CreatedDate ASC];
+        System.assertEquals(2, notification.size(), 'Two Customer Notification records must be created');
+
+		System.assertEquals(acc.Id, notification[0].Customer__c, 'Customer__c must match for creation notificaiton');
+        System.assertEquals('CUSTOMER_NOTIFICATION', notification[0].Related_To__c, 'Related_to__c must equals to CUSTOMER_NOTIFICATION');
+        System.assertEquals(customerNotificationMap.get('Customer_Creation').Title_EN_US__c, notification[0].Title__c, 'Title__c must match for creation notification');
+        System.assertEquals(customerNotificationMap.get('Customer_Creation').Push_Title_EN_US__c, notification[0].Push_Title__c, 'Push_Title__c must match for creation notification');
+
+		String creationContent = 'Your Visa Benefits Portal registration is complete. Start exploring and enjoying your Visa card benefits.';
+		System.assertEquals(creationContent, notification[0].Content__c, 'Content__c must match for creation notification');
+		System.assertEquals(creationContent, notification[0].Push_Content__c, 'Push_Content__c must match for creation notification');
+
+        System.assertEquals(acc.Id, notification[1].Customer__c, 'Customer__c must match for update notificaiton');
+		System.assertEquals('CUSTOMER_NOTIFICATION', notification[1].Related_To__c, 'Related_to__c must equals to CUSTOMER_NOTIFICATION');
+        System.assertEquals(customerNotificationMap.get('Customer_Update').Title_EN_US__c, notification[1].Title__c, 'Title__c must match for update notification');
+        System.assertEquals(customerNotificationMap.get('Customer_Update').Push_Title_EN_US__c, notification[1].Push_Title__c, 'Push_Title__c must match for update notification');
+
+		String updateContent = 'Hi ' + acc.FirstName + ', we’ve successfully updated your personal details.';
+        System.assertEquals(updateContent, notification[1].Content__c, 'Content__c must match for update notification');
+        System.assertEquals(updateContent, notification[1].Push_Content__c, 'Push_Content__c must match for update notification');
+	}
+
+	// Fail Scenarios
+	@isTest static void createNewAccountWithoutCustomerIdFail() {
+		WebportalCustomerAPI_V3.Customer customer = getBasePostModel();
+		customer.customer_id = null;
+
+		String jsonRequest = JSON.serialize(customer);
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+		
+		WebportalCustomerAPI_V3.doPost();
+		System.assertEquals(400, RestContext.response.statuscode);
+
+		Test.stoptest();
+	}
+
+	@isTest static void createNewAccountWithoutPersonFail() {
+		WebportalCustomerAPI_V3.Customer customer = WebportalCustomerAPI_V3.createCustomerMock();
+		customer.person = null;
+
+		String jsonRequest = JSON.serialize(customer);
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();	
+		System.assertEquals(400, RestContext.response.statuscode);
+
+		Test.stoptest();
+	}
+
+	@isTest static void createNewAccountWithWrongJSON() {
+		WebportalCustomerAPI_V3.Customer customer = WebportalCustomerAPI_V3.createCustomerMock();
+
+		String jsonRequest = '';
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+		
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();
+		System.assertEquals(400, RestContext.response.statuscode);
+
+		Test.stoptest();
+	}
+
+	@isTest static void createNewAccounWithoutPartner() {
+		delete [Select Id from API_Client__c];
+		String jsonRequest = JSON.serialize( WebportalCustomerAPI_V3.createCustomerMock() );
+
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer '+token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(jsonRequest);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+		
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();
+		System.assertEquals(404, RestContext.response.statuscode);
+
+		Test.stoptest();
+	}
+
+	@isTest static void createNewAccountWithFirstNameLong() {
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(requestBodyFirstNameLong);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();	
+		System.assertEquals(400, RestContext.response.statuscode);
+
+		Test.stoptest();
+
+		List<Customer_Notification__c> notification = [SELECT Id, Customer__c, Related_To__c, Title__c, Content__c, Push_Title__c, Push_Content__c FROM Customer_Notification__c];
+        System.assertEquals(0, notification.size(), 'No Customer Notification records must be created');
+	}
+
+	@isTest static void createNewAccountWithLastNameLong() {
+		RestRequest req = new RestRequest();
+		RestResponse res = new RestResponse();
+		
+		req.requestURI = '/specific/visagateway/v3/customers/';
+		req.httpMethod = 'POST';
+		req.headers.put('authorization2', 'Bearer ' + token);
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(requestBodyLastNameLong);
+            
+        req.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+		RestContext.request = req;
+		RestContext.response = res;
+
+		Test.starttest();
+
+		WebportalCustomerAPI_V3.doPost();	
+		System.assertEquals(400, RestContext.response.statuscode);
+
+		Test.stoptest();
+
+		List<Customer_Notification__c> notification = [SELECT Id, Customer__c, Related_To__c, Title__c, Content__c, Push_Title__c, Push_Content__c FROM Customer_Notification__c];
+        System.assertEquals(0, notification.size(), 'No Customer Notification records must be created');
+	}
+
+	@isTest
+	static void updateRoleFail() {
+		WebportalCustomerAPI_V3.Customer customer = WebportalCustomerAPI_V3.createCustomerMock();
+		customer.role = 'READER';
+
+		JSONWebEncryption jweToken = JWE();
+
+		WebportalCustomerAPI_V3.EncryptedData encrypt = new WebportalCustomerAPI_V3.EncryptedData();
+        encrypt.encrypted_data = jweToken.encrypt(JSON.serialize(customer));
+
+		Account acc = [SELECT Customer_Identifier__c, FirstName FROM Account ORDER BY CreatedDate DESC LIMIT 1];
+
+		RestContext.request = new RestRequest();
+		RestContext.response = new RestResponse();
+
+		RestContext.request.requestURI = '/specific/visagateway/v3/customers/' + acc.Customer_Identifier__c;
+		RestContext.request.httpMethod = 'PATCH';
+		RestContext.request.headers.put('authorization2', 'Bearer ' + token);
+		RestContext.request.requestBody = Blob.valueOf(JSON.serialize(encrypt));
+
+        String errorMessage;
+		Test.startTest();
+		try {
+			WebportalCustomerAPI_V3.doPatch();
+		} catch (Exception error) {
+            errorMessage = error.getMessage();
+		}
+		Test.stoptest();
+
+		System.assertEquals(400, RestContext.response.statuscode);
+	}
+
+	public static JSONWebEncryption JWE() {
+        String clientId = '6d09b1ab';
+        Client_Key__c key = [Select AES_Key__c, AES_IV__c, Mac_Key__c, RSA_Key__c, Encryption_Scheme__c, CEK_Scheme__c,KID__c from Client_Key__c where ClientID__c = :clientId];
+		
+        JSONWebEncryption.JOSEHeader header = new JSONWebEncryption.JOSEHeader();
+        header.alg = key.CEK_Scheme__c;
+        header.enc = key.Encryption_Scheme__c;
+        header.kid = key.KID__c;
+        
+        JSONWebEncryption jwe = new JSONWebEncryption();
+        jwe.setProtectedHeader( header );
+        
+        if( key.CEK_Scheme__c == 'dir' ) {
+            jwe.setContentEncrytionKeySecret( key.Mac_Key__c + key.AES_Key__c );
+            jwe.setInitializationVector( key.AES_IV__c );
+        } else {
+            JSONWebEncryption.JWK jwkKey = (JSONWebEncryption.JWK) JSON.deserialize( key.RSA_Key__c, JSONWebEncryption.JWK.class );
+            jwe.setCEKAlgorithmKey( jwkKey );
+        }
+        
+        return jwe;
+    }
+}
