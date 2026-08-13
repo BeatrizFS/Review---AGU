@@ -1,12 +1,51 @@
+// ============================================================
+// POST
+// ============================================================
+
+@HttpPost
+global static void doPost() {
+    RestContext.response.addHeader('Content-Type', 'application/json');
+
+    List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+    if (segments.isEmpty()) {
+        handleCreate();
+    } else if (segments.size() == 2 && segments[1] == 'complete') {
+        handleComplete(segments[0]);
+    } else {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            404,
+            'not_found',
+            'Unknown resource path'
+        );
+    }
+}
+
+
+// ============================================================
+// POST - COMPLETE
+// ============================================================
+
 private static void handleComplete(String benefitPackageId) {
     try {
-        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
-            RestContext.request,
-            new Set<String>{
-                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
-                'urn:axa.partners.benefits_platform.write'
-            }
-        );
+        WebportalAPITokenAuthentication_v1.AccessTokenData accessTokenData =
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                    'urn:axa.partners.benefits_platform.write'
+                }
+            );
+
+        /*
+         * Resolve aqui o banco do caller a partir do token.
+         *
+         * Exemplo:
+         * Id bankId = ...;
+         *
+         * A query abaixo deve utilizar o relacionamento real
+         * entre ServiceContract e o banco.
+         */
 
         List<ServiceContract> packages = [
             SELECT Id,
@@ -35,10 +74,25 @@ private static void handleComplete(String benefitPackageId) {
         ServiceContract contract = packages[0];
 
         validateCompleteStatus(contract);
-        validateCompletePackage(contract);
         validateCompleteCoreBenefits(contract);
+        validateCompleteBin(contract);
 
-        contract.Package_Status__c = PACKAGE_STATUS.get('AWAITING_START');
+        /*
+         * As regras de:
+         * - EndDate > StartDate
+         * - Amount_of_Policies__c >= 1
+         * - Policy Range Start <= End
+         * - BIN obrigatório
+         *
+         * já possuem Validation Rules na org.
+         *
+         * Portanto, não duplicamos essas regras aqui.
+         */
+
+        contract.Package_Status__c =
+            PACKAGE_STATUS.get('AWAITING_START');
+
+        contract.Completed_At__c = Datetime.now();
 
         update contract;
 
@@ -55,15 +109,33 @@ private static void handleComplete(String benefitPackageId) {
                 )
             )
         );
+
+    } catch (DMLException ex) {
+        System.debug(
+            LoggingLevel.ERROR,
+            'DMLException: ' + ex.getMessage()
+        );
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'database_internal_server_error',
+                    'Error when try to update record in database.'
+                )
+            )
+        );
+
     } catch (Exception ex) {
         System.debug(
             LoggingLevel.ERROR,
-            'Unexpected error completing benefit package: ' +
-            ex.getMessage()
+            'Exception type: ' + ex.getTypeName()
         );
         System.debug(
             LoggingLevel.ERROR,
-            'Error Line: ' + ex.getLineNumber()
+            'Exception stack tracing: ' +
+            ex.getStackTraceString()
         );
 
         RestContext.response.statusCode = 500;
@@ -79,7 +151,14 @@ private static void handleComplete(String benefitPackageId) {
     }
 }
 
-private static void validateCompleteStatus(ServiceContract contract) {
+
+// ============================================================
+// COMPLETE - STATUS VALIDATION
+// ============================================================
+
+private static void validateCompleteStatus(
+    ServiceContract contract
+) {
     if (contract.Package_Status__c != PACKAGE_STATUS.get('DRAFT')) {
         throw new WebportalApiUtility_v1.RequestAPIException(
             400,
@@ -90,74 +169,10 @@ private static void validateCompleteStatus(ServiceContract contract) {
     }
 }
 
-private static void validateCompletePackage(ServiceContract contract) {
-    if (String.isBlank(contract.Product_Reference__c)) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'product_reference is required.'
-        );
-    }
 
-    if (
-        contract.Amount_of_Policies__c == null ||
-        contract.Amount_of_Policies__c < 1
-    ) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'amount_of_policies must be at least 1.'
-        );
-    }
-
-    if (contract.StartDate == null) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'active_start_at is required.'
-        );
-    }
-
-    if (contract.EndDate == null) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'active_end_at is required.'
-        );
-    }
-
-    if (contract.EndDate <= contract.StartDate) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'active_end_at must be greater than active_start_at.'
-        );
-    }
-
-    if (String.isBlank(contract.Policy_Range_Start__c)) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'affected_policy_range.external_number_start_at is required.'
-        );
-    }
-
-    if (String.isBlank(contract.Policy_Range_End__c)) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'affected_policy_range.external_number_end_at is required.'
-        );
-    }
-
-    if (String.isBlank(contract.Bank_Identification_Number__c)) {
-        throw new WebportalApiUtility_v1.RequestAPIException(
-            400,
-            'bad_request',
-            'bank_identification_number is required.'
-        );
-    }
-}
+// ============================================================
+// COMPLETE - CORE BENEFITS VALIDATION
+// ============================================================
 
 private static void validateCompleteCoreBenefits(
     ServiceContract contract
@@ -176,4 +191,35 @@ private static void validateCompleteCoreBenefits(
             'At least one core benefit is required.'
         );
     }
+}
+
+
+// ============================================================
+// COMPLETE - BIN VALIDATION
+// ============================================================
+
+private static void validateCompleteBin(
+    ServiceContract contract
+) {
+    if (contract.Bank_Identification_Number__c == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'bank_identification_number is required.'
+        );
+    }
+
+    /*
+     * TODO:
+     *
+     * Validar que o BIN:
+     *
+     * 1. Existe;
+     * 2. Está aprovado;
+     * 3. Pertence ao banco do caller.
+     *
+     * A implementação exata depende do objeto relacionado
+     * a Bank_Identification_Number__c e dos campos reais
+     * existentes na org.
+     */
 }
