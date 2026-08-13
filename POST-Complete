@@ -1,75 +1,179 @@
-| `benefit_packages/{benefit_package_id}/complete` | `POST` | Submit a package and let it await its start date. |
-```apex
-@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
-global with sharing class BenefitsConfigAPIPackages_VEXP extends BenefitsConfigAPIBase_V1 {
+private static void handleComplete(String benefitPackageId) {
+    try {
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                'urn:axa.partners.benefits_platform.write'
+            }
+        );
 
-    private static final String RESOURCE_PATH = '/benefit_packages';
-    private static final String ACTION_CANCEL = 'cancel';
-    private static final String ACTION_COMPLETE = 'complete';
+        List<ServiceContract> packages = [
+            SELECT Id,
+                Package_Status__c,
+                Product_Reference__c,
+                StartDate,
+                EndDate,
+                Amount_of_Policies__c,
+                Policy_Range_Start__c,
+                Policy_Range_End__c,
+                Bank_Identification_Number__c
+            FROM ServiceContract
+            WHERE Id = :benefitPackageId
+            AND RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
 
-    @HttpPost
-    global static void doPost() {
-        RestContext.response.addHeader('Content-Type', 'application/json');
-        List<String> segments = getResourceSegments(RESOURCE_PATH);
-        if (segments.isEmpty()) {
-            handleCreate();
-        } else if (segments.size() == 2 && segments[1] == ACTION_CANCEL) {
-            handleCancel(segments[0]);
-        } else if (segments.size() == 2 && segments[1] == ACTION_COMPLETE) {
-            handleComplete(segments[0]);
-        } else {
-            writeError(404, 'not_found', 'Unknown resource path');
+        if (packages.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                'Not Found',
+                'The searched resource was not found.'
+            );
         }
+
+        ServiceContract contract = packages[0];
+
+        validateCompleteStatus(contract);
+        validateCompletePackage(contract);
+        validateCompleteCoreBenefits(contract);
+
+        contract.Package_Status__c = PACKAGE_STATUS.get('AWAITING_START');
+
+        update contract;
+
+        RestContext.response.statusCode = 204;
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+        RestContext.response.statusCode = ex.status_code;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    String.valueOf(ex.status_code),
+                    ex.error,
+                    ex.error_description
+                )
+            )
+        );
+    } catch (Exception ex) {
+        System.debug(
+            LoggingLevel.ERROR,
+            'Unexpected error completing benefit package: ' +
+            ex.getMessage()
+        );
+        System.debug(
+            LoggingLevel.ERROR,
+            'Error Line: ' + ex.getLineNumber()
+        );
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error completing the benefit package.'
+                )
+            )
+        );
+    }
+}
+
+private static void validateCompleteStatus(ServiceContract contract) {
+    if (contract.Package_Status__c != PACKAGE_STATUS.get('DRAFT')) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'Benefit package cannot be completed from status ' +
+            contract.Package_Status__c + '.'
+        );
+    }
+}
+
+private static void validateCompletePackage(ServiceContract contract) {
+    if (String.isBlank(contract.Product_Reference__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'product_reference is required.'
+        );
     }
 
-stateDiagram-v2
-    [*] --> Draft: POST /benefit_packages
-    Draft --> Draft: PATCH
-    Draft --> Awaiting_Start: POST /complete
-    Draft --> Cancelled: POST /cancel
-    Awaiting_Start --> Active: batch, StartDate reached
-    Awaiting_Start --> Cancelled: POST /cancel
-    Active --> Expired: batch, EndDate passed
-    Active --> Cancelled: POST /cancel
-    Cancelled --> [*]
-    Expired --> [*]
+    if (
+        contract.Amount_of_Policies__c == null ||
+        contract.Amount_of_Policies__c < 1
+    ) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'amount_of_policies must be at least 1.'
+        );
+    }
 
-**Activation is gated on the signed agreement.** A package whose start date arrived without
-`Agreement_Envelope_Status__c = 'completed'` stays in `Awaiting Start` and is stamped with a hold
-reason, so the state is explainable without reading a log; the hold reason is written once and not
-rewritten on every daily pass, which keeps the batch from updating rows it cannot advance. Expiry is
-**not** gated — an unsigned package still expires on its end date rather than lingering. The gate
-lives here and not in `POST /complete` for the reason given in decision 12 of
-`20260725-AXA-ADR-VOBP-architecture-of-agreement-signature-backend.md`: blocking completion would
-strand a finished configuration behind a counterparty's signature.
+    if (contract.StartDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_start_at is required.'
+        );
+    }
 
-A formula field was discarded: a derived status emits no change event, cannot be overridden for
-an operational correction, and cannot be filtered against efficiently at scale, since formula
-fields referencing `TODAY()` are not indexable. A scheduled Flow was discarded for volume — the
-promotion sweeps the entire active package base daily, which belongs in a batch with a
-`QueryLocator`.
+    if (contract.EndDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_end_at is required.'
+        );
+    }
 
+    if (contract.EndDate <= contract.StartDate) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'active_end_at must be greater than active_start_at.'
+        );
+    }
 
-### 12. Validation and the editability window
+    if (String.isBlank(contract.Policy_Range_Start__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'affected_policy_range.external_number_start_at is required.'
+        );
+    }
 
-| Rule | Enforcement | Rationale |
-|---|---|---|
-| `EndDate > StartDate` | Validation rule `Benefit_Package_Date_Order` | Data integrity independent of the channel. |
-| `Amount_of_Policies__c >= 1` | Validation rule `Benefit_Package_Policy_Volume` | Matches `minimum: 1` in the contract. |
-| `Policy_Range_Start__c <= Policy_Range_End__c` (numeric comparison) | Validation rule `Benefit_Package_Range_Order` | Both are Text(10) holding digits; the rule casts with `VALUE()`. |
-| `Bank_Identification_Number__c` populated | Required lookup, plus validation rule `Benefit_Package_BIN_Required` | The backend requires the BIN to exist. The rule covers records created outside the API, where a required lookup alone is bypassable by some tooling. |
-| BIN belongs to the package's bank and is approved | Apex, on create and on `/complete` | A required lookup guarantees presence, not ownership; the bank predicate is enforced in code. |
-| At least one `Core` line | Apex, on `/complete` | The contract requires `core_benefits` with `minItems: 1`, but only a completed package must satisfy it — a draft is legitimately incomplete. |
-| Mutation only while `Draft` | Apex, in the PATCH handler | Returns a precise contract error; see the endpoints document. |
-| Terminal states immutable | Trigger handler | Rejects any field change on `Cancelled` / `Expired` records. |
+    if (String.isBlank(contract.Policy_Range_End__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'affected_policy_range.external_number_end_at is required.'
+        );
+    }
 
-Every validation rule carries a bypass on the custom permission
-**`Bypass_Benefit_Package_Validation`**, granted to no persona by default and used only for
-data remediation.
+    if (String.isBlank(contract.Bank_Identification_Number__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'bank_identification_number is required.'
+        );
+    }
+}
 
-`StartDate` in the past is **not** rejected. The contract states that a past
-`active_start_at` is coerced to today; the coercion happens in Apex on write, before the
-validation rules run.
+private static void validateCompleteCoreBenefits(
+    ServiceContract contract
+) {
+    Integer coreBenefits = [
+        SELECT COUNT()
+        FROM ContractLineItem
+        WHERE ServiceContractId = :contract.Id
+        AND Benefit_Category__c = 'Core'
+    ];
 
-
+    if (coreBenefits == 0) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'At least one core benefit is required.'
+        );
+    }
 }
