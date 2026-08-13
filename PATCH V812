@@ -1167,4 +1167,714 @@ public class Test_BenefitsConfigAPIPackages_VEXP {
 
         System.assertEquals(404, RestContext.response.statuscode);
     }
+
+// ============================================================
+// PATCH - SUCCESS
+// ============================================================
+
+@isTest
+static void updateBenefitPackage() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.put('active_start_at', '2026-10-01');
+    body.put('active_end_at', '2027-10-01');
+    body.put('amount_of_policies', 200);
+
+    body.put(
+        'affected_policy_range',
+        new Map<String, Object>{
+            'external_number_start_at' => '2000',
+            'external_number_end_at' => '2200'
+        }
+    );
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(204, RestContext.response.statusCode);
+    System.assertEquals(null, RestContext.response.responseBody);
+
+    ServiceContract updatedContract = [
+        SELECT Id,
+               Package_Status__c,
+               Product_Reference__c,
+               Product__c,
+               StartDate,
+               EndDate,
+               Term,
+               Amount_of_Policies__c,
+               Policy_Range_Start__c,
+               Policy_Range_End__c,
+               Legal_Consent_Code__c,
+               Legal_Consent_Confirmed__c,
+               Legal_Consent_Date__c
+        FROM ServiceContract
+        WHERE Id = :contract.Id
+    ];
+
+    System.assertEquals('Draft', updatedContract.Package_Status__c);
+    System.assertEquals('I_C_BR', updatedContract.Product_Reference__c);
+    System.assertNotEquals(null, updatedContract.Product__c);
+    System.assertEquals(Date.newInstance(2026, 10, 1), updatedContract.StartDate);
+    System.assertEquals(Date.newInstance(2027, 10, 1), updatedContract.EndDate);
+    System.assertEquals(12, updatedContract.Term);
+    System.assertEquals(200, Integer.valueOf(updatedContract.Amount_of_Policies__c));
+    System.assertEquals('2000', updatedContract.Policy_Range_Start__c);
+    System.assertEquals('2200', updatedContract.Policy_Range_End__c);
+    System.assertEquals(
+        'legal_consent_I_understand',
+        updatedContract.Legal_Consent_Code__c
+    );
+    System.assertEquals(true, updatedContract.Legal_Consent_Confirmed__c);
+    System.assertNotEquals(null, updatedContract.Legal_Consent_Date__c);
+
+    List<ContractLineItem> lineItems = [
+        SELECT Id,
+               Benefit_Category__c,
+               Quantity,
+               UnitPrice,
+               StartDate,
+               EndDate,
+               PricebookEntry.Product2.Benefit__r.Visa_External_Reference__c
+        FROM ContractLineItem
+        WHERE ServiceContractId = :contract.Id
+        ORDER BY Benefit_Category__c
+    ];
+
+    System.assertEquals(2, lineItems.size());
+
+    System.assertEquals('Core', lineItems[0].Benefit_Category__c);
+    System.assertEquals(200, Integer.valueOf(lineItems[0].Quantity));
+    System.assertEquals(0, lineItems[0].UnitPrice);
+    System.assertEquals(
+        'LACIEMS',
+        lineItems[0].PricebookEntry.Product2.Benefit__r.Visa_External_Reference__c
+    );
+    System.assertEquals(
+        Date.newInstance(2026, 10, 1),
+        lineItems[0].StartDate
+    );
+    System.assertEquals(
+        Date.newInstance(2027, 10, 1),
+        lineItems[0].EndDate
+    );
+
+    System.assertEquals('Optional', lineItems[1].Benefit_Category__c);
+    System.assertEquals(200, Integer.valueOf(lineItems[1].Quantity));
+    System.assertEquals(50, lineItems[1].UnitPrice);
+    System.assertEquals(
+        'LACCELPRO',
+        lineItems[1].PricebookEntry.Product2.Benefit__r.Visa_External_Reference__c
+    );
+}
+
+
+// ============================================================
+// PATCH - UNAUTHORIZED
+// ============================================================
+
+@isTest
+static void updateBenefitPackageUnauthorized() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.requestBody = Blob.valueOf(requestBody);
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(401, RestContext.response.statusCode);
+}
+
+
+// ============================================================
+// PATCH - NOT FOUND
+// ============================================================
+
+@isTest
+static void updateBenefitPackageNotFound() {
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/001000000000000AAA';
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(requestBody);
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(404, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('404', response.status_code);
+    System.assertEquals('Not Found', response.error);
+    System.assertEquals(
+        'The searched resource was not found.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - NOT DRAFT
+// ============================================================
+
+@isTest
+static void updateBenefitPackageNotDraft() {
+    ServiceContract contract = [
+        SELECT Id, Package_Status__c
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    contract.Package_Status__c = 'Active';
+    update contract;
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(requestBody);
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals('bad_request', response.error);
+    System.assertEquals(
+        'Benefit package cannot be updated because its current status is Active.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - EMPTY BODY
+// ============================================================
+
+@isTest
+static void updateBenefitPackageEmptyBody() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf('');
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals('bad_request', response.error);
+    System.assertEquals(
+        'Request body cannot be empty.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - INVALID JSON
+// ============================================================
+
+@isTest
+static void updateBenefitPackageInvalidJson() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf('{"product_reference":"I_C_BR"');
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals('Bad Request', response.error);
+}
+
+
+// ============================================================
+// PATCH - REQUIRED FIELD
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithoutProductReference() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.remove('product_reference');
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+}
+
+
+// ============================================================
+// PATCH - INVALID AMOUNT
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithInvalidAmountOfPolicies() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.put('amount_of_policies', 0);
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals(
+        'amount_of_policies must be a positive integer.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - PRODUCT NOT FOUND
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithProductNotFound() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.put('product_reference', 'PRODUCT-NOT-FOUND');
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals(
+        'Product with reference PRODUCT-NOT-FOUND not found.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - BENEFIT NOT FOUND
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithBenefitNotFound() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.put(
+        'core_benefits',
+        new List<Object>{
+            new Map<String, Object>{
+                'benefit_id' => 'BENEFIT-NOT-FOUND',
+                'name' => 'Benefit Not Found'
+            }
+        }
+    );
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals(
+        'Benefit BENEFIT-NOT-FOUND was not found in the catalogue.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - BENEFIT WITHOUT PRICEBOOK ENTRY
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithProduct2NotFoundForBenefit() {
+    Benefit__c benefit = new Benefit__c(
+        Name = 'Benefit Without Product',
+        Visa_External_Reference__c = 'PATCH-NO-PRODUCT',
+        External_Reference__c = 'Patch_Benefit_Without_Product'
+    );
+
+    insert benefit;
+
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.put(
+        'core_benefits',
+        new List<Object>{
+            new Map<String, Object>{
+                'benefit_id' => 'PATCH-NO-PRODUCT',
+                'name' => 'Benefit Without Product'
+            }
+        }
+    );
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(400, RestContext.response.statusCode);
+
+    WebportalApiUtility_v1.ErrorMessage response =
+        (WebportalApiUtility_v1.ErrorMessage) JSON.deserialize(
+            RestContext.response.responseBody.toString(),
+            WebportalApiUtility_v1.ErrorMessage.class
+        );
+
+    System.assertEquals('400', response.status_code);
+    System.assertEquals(
+        'Benefit PATCH-NO-PRODUCT is not available in the Benefits Pricebook.',
+        response.error_description
+    );
+}
+
+
+// ============================================================
+// PATCH - WITHOUT OPTIONAL BENEFITS
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithoutOptionalBenefits() {
+    ServiceContract contract = [
+        SELECT Id
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.remove('optional_benefits');
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(204, RestContext.response.statusCode);
+
+    List<ContractLineItem> lineItems = [
+        SELECT Id, Benefit_Category__c
+        FROM ContractLineItem
+        WHERE ServiceContractId = :contract.Id
+    ];
+
+    System.assertEquals(1, lineItems.size());
+    System.assertEquals('Core', lineItems[0].Benefit_Category__c);
+}
+
+
+// ============================================================
+// PATCH - WITHOUT POLICY RANGE
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithoutPolicyRange() {
+    ServiceContract contract = [
+        SELECT Id,
+               Policy_Range_Start__c,
+               Policy_Range_End__c
+        FROM ServiceContract
+        WHERE RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    System.assertEquals('1000', contract.Policy_Range_Start__c);
+    System.assertEquals('1100', contract.Policy_Range_End__c);
+
+    Map<String, Object> body =
+        (Map<String, Object>) JSON.deserializeUntyped(requestBody);
+
+    body.remove('affected_policy_range');
+
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/' + contract.Id;
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(JSON.serialize(body));
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+    BenefitsConfigAPIPackages_VEXP.doPatch();
+    Test.stopTest();
+
+    System.assertEquals(204, RestContext.response.statusCode);
+
+    ServiceContract updatedContract = [
+        SELECT Policy_Range_Start__c,
+               Policy_Range_End__c
+        FROM ServiceContract
+        WHERE Id = :contract.Id
+    ];
+
+    System.assertEquals(null, updatedContract.Policy_Range_Start__c);
+    System.assertEquals(null, updatedContract.Policy_Range_End__c);
+}
+
+
+// ============================================================
+// PATCH - INVALID RESOURCE PATH
+// ============================================================
+
+@isTest
+static void updateBenefitPackageWithInvalidResourcePath() {
+    RestRequest req = new RestRequest();
+    RestResponse res = new RestResponse();
+
+    req.requestURI = BASE_URI + '/001/extra';
+    req.httpMethod = 'PATCH';
+    req.headers.put('authorization2', 'Bearer ' + token);
+    req.requestBody = Blob.valueOf(requestBody);
+
+    RestContext.request = req;
+    RestContext.response = res;
+
+    Test.startTest();
+
+    try {
+        BenefitsConfigAPIPackages_VEXP.doPatch();
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+        RestContext.response.statusCode = ex.status_code;
+    }
+
+    Test.stopTest();
+
+    System.assertEquals(404, RestContext.response.statusCode);
+}
+
 }
