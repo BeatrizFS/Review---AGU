@@ -1,0 +1,239 @@
+/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/{benefit_package_id}
+Updates a benefit package resource.
+
+Jump to definition
+Cf. summary
+
+Parameters
+Try it out
+Name	Description
+benefit_package_id *
+string
+(path)
+Identifier of the benefit package.
+
+b09aac28-7f63
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "product_reference": "I_C_BR",
+  "active_start_at": "2028-05-22",
+  "active_end_at": "2029-05-22",
+  "amount_of_policies": 12500,
+  "affected_policy_range": {
+    "external_number_start_at": "1234569890",
+    "external_number_end_at": "1234569890"
+  },
+  "core_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "optional_benefits": [
+    {
+      "benefit_id": "6fd155eb-c93e-4390-8671-8831f2b6ab57",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "legal_consents": [
+    {
+      "code": "legal_consent_I_understand",
+      "is_confirmed": true,
+      "consented_at": "2019-03-22T10:59:00Z"
+    }
+  ]
+}
+Responses
+Code	Description	Links
+204	
+Patch successfully done (No content returned).
+
+No links
+400	
+Bad Request.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "400",
+  "error": "Bad Request",
+  "error_description": "The input information received were not compliant with the endpoint specification."
+}
+No links
+401	
+Unauthorized. The identity of the caller has not been definitely confirmed (invalid issuer, expired token, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "401",
+  "error": "Unauthorized",
+  "error_description": "Header \"authorization\" is not a valid JSON Web Token."
+}
+No links
+403	
+Forbidden. The identity of the caller is confirmed, however the required access grants are not met (missing scope, unknown client_id, ...)
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "403",
+  "error": "Forbidden",
+  "error_description": "The right to access this endpoint has not been granted in the JSON Web Token."
+}
+No links
+404	
+Not found. The server did not find a current representation for the searched resource.
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "status_code": "404",
+  "error": "Not Found",
+  "error_description": "The searched resource was not found."
+}
+No links
+default	
+Default response format.
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "status_code": "500",
+  "error": "Internal Server Error"
+}
+
+```mermaid
+stateDiagram-v2
+    [*] --> Draft: POST /benefit_packages
+    Draft --> Draft: PATCH
+    Draft --> Awaiting_Start: POST /complete
+    Draft --> Cancelled: POST /cancel
+    Awaiting_Start --> Active: batch, StartDate reached
+    Awaiting_Start --> Cancelled: POST /cancel
+    Active --> Expired: batch, EndDate passed
+    Active --> Cancelled: POST /cancel
+    Cancelled --> [*]
+    Expired --> [*]
+```
+
+`Cancelled` and `Expired` are terminal. No transition leaves them, including through PATCH.
+
+
+### 12. Validation and the editability window
+
+| Rule | Enforcement | Rationale |
+|---|---|---|
+| `EndDate > StartDate` | Validation rule `Benefit_Package_Date_Order` | Data integrity independent of the channel. |
+| `Amount_of_Policies__c >= 1` | Validation rule `Benefit_Package_Policy_Volume` | Matches `minimum: 1` in the contract. |
+| `Policy_Range_Start__c <= Policy_Range_End__c` (numeric comparison) | Validation rule `Benefit_Package_Range_Order` | Both are Text(10) holding digits; the rule casts with `VALUE()`. |
+| `Bank_Identification_Number__c` populated | Required lookup, plus validation rule `Benefit_Package_BIN_Required` | The backend requires the BIN to exist. The rule covers records created outside the API, where a required lookup alone is bypassable by some tooling. |
+| BIN belongs to the package's bank and is approved | Apex, on create and on `/complete` | A required lookup guarantees presence, not ownership; the bank predicate is enforced in code. |
+| At least one `Core` line | Apex, on `/complete` | The contract requires `core_benefits` with `minItems: 1`, but only a completed package must satisfy it — a draft is legitimately incomplete. |
+| Mutation only while `Draft` | Apex, in the PATCH handler | Returns a precise contract error; see the endpoints document. |
+| Terminal states immutable | Trigger handler | Rejects any field change on `Cancelled` / `Expired` records. |
+
+Every validation rule carries a bypass on the custom permission
+**`Bypass_Benefit_Package_Validation`**, granted to no persona by default and used only for
+data remediation.
+
+`StartDate` in the past is **not** rejected. The contract states that a past
+`active_start_at` is coerced to today; the coercion happens in Apex on write, before the
+validation rules run.
+
+## Confirmed premises
+
+1. **Salesforce is the system of record.** No outbound call participates in any of the nine
+   operations. There is no Named Credential and no external service class in this solution.
+2. **The actor is an issuer bank agent** whose identity arrives as custom claims in the access
+   token, following the pattern already established by `WebportalAPITokenAuthentication_v1`
+   (`tokenData.customData`). The agent is not a Salesforce user.
+3. **Message-level encryption is mandatory** on every request body and every response body, using
+   the same mechanism as `WebportalCustomerAPI_V3`: `JSONWebEncryption` with per-client keys in
+   `Client_Key__c`.
+4. **The Apex URL mapping mirrors the gateway path literally, including the `vexp` segment.**
+5. **`PATCH` is accepted only while the package is in `DRAFT`, and the benefit collections are
+   replaced wholesale**, never merged.
+6. **`amount_of_policies` is accepted as declared** and is not validated against card data.
+
+
+| GET, PATCH, cancel, complete on `{id}` | `WHERE Id = :packageId AND AccountId = :context.bankAccountId` |
+
+### 11. PATCH `/benefit_packages/{benefit_package_id}` — update
+
+Response `204` with no body.
+
+- Accepted **only** when `Package_Status__c = 'Draft'`. Any other status yields
+  `400 bad_request` with an error description naming the current status. `403` is not used here:
+  the caller holds the right scope and the right bank, the resource state is what forbids the
+  operation.
+- Attributes present in the body are applied; absent attributes are left untouched.
+- `core_benefits` and `optional_benefits`, **when present**, replace the corresponding lines
+  entirely: the existing lines of that category are deleted and the submitted set is inserted.
+  Merge semantics were discarded because the contract offers no removal operation, so a merge
+  would make it impossible to deselect a benefit the agent had previously chosen — the New package
+  flow lets an agent toggle optional benefits freely.
+- Sending an empty array is a rejection, not a clearing: the contract declares `minItems: 1` for
+  both collections. Clearing every core benefit would produce a package that can never be
+  completed.
+- `benefit_package_id` and `status` in the body are ignored; both are `readOnly`.
+
+Delete plus insert of the lines runs in the same transaction as the header update. Where a package
+carries the contract maximum of 100 core and 100 optional benefits, a full replacement is 200 rows
+deleted and 200 inserted — well inside DML row limits, and the reason the operation stays
+synchronous.
+
+
+### 15. Performance budget against the declared SLA
+
+The contracts declare `x-satisfactory-response-time` of **250 ms for reads** and **500 ms for
+writes**. That budget is tight for Apex REST with message-level encryption, so the design commits
+to a fixed query count per operation:
+
+| Operation | SOQL | DML | JWE operations |
+|---|---|---|---|
+| POST create | 4 (agent, product, benefits, price entries) | 2 | 1 decrypt + 1 encrypt |
+| GET list | 2 (agent, packages) | 0 | 1 encrypt |
+| GET detail | 3 (agent, header, lines) | 0 | 1 encrypt |
+| PATCH | 4 | 3 (update, delete lines, insert lines) | 1 decrypt + 1 encrypt |
+| cancel / complete | 2–3 | 1 | 1 encrypt |
+| GET products | 3 | 0 | 1 encrypt |
+| GET bank / agent | 2 | 0 | 1 encrypt |
+
+Rules that keep those counts stable: no SOQL and no DML inside a loop; one token parse per
+request; every query bounded by `LIMIT` and selective on an indexed field; the catalogue resolved
+in bulk by `Set<Id>` rather than per benefit. The most expensive read is the package detail with
+its 100-plus lines, and the most expensive write is a full PATCH replacement of 200 lines. Both
+are inside platform limits with substantial margin, but neither is inside 250 ms with certainty —
+which is why the SLA is recorded as R1 rather than asserted as met.
+
+Message-level encryption is the single largest non-query cost, and it is not negotiable
+(decision 6). Load testing against the real key configuration, before the contract is published,
+is a next step.
+
+
+**R6 — `PATCH` replaces benefit collections wholesale.** A consumer that sends a partial body
+believing the semantics are incremental removes every benefit it omitted. The contract does not
+declare the semantics either way. Mitigation: documented behaviour, `minItems: 1` enforced so the
+collections can never end up empty, and the distinction made explicit in the consumer-facing API
+documentation.
