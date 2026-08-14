@@ -20,3 +20,46 @@
             );
         }
     }
+====================
+====================
+===================
+
+private static void populateLegalConsents(ServiceContract contract, BenefitPackage request) {
+    if (request.legal_consents == null || request.legal_consents.isEmpty()) {
+        return;
+    }
+
+    LegalConsentItem consent = request.legal_consents[0];
+
+    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+        contract,
+        'Legal_Consent_Code__c',
+        consent.code,
+        false
+    );
+
+    contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+        contract,
+        'Legal_Consent_Confirmed__c',
+        consent.is_confirmed != null ? consent.is_confirmed : false
+    );
+
+    if (String.isNotBlank(consent.consented_at)) {
+        String value = consent.consented_at;
+
+        if (value.endsWith('Z')) {
+            value = value.substring(0, value.length() - 1);
+        }
+
+        value = value.replace('T', ' ');
+
+        Datetime consentedAt = Datetime.valueOfGmt(value);
+
+        contract = (ServiceContract) WebportalApiUtility_v1.setSObjectField(
+            contract,
+            'Legal_Consent_Date__c',
+            consentedAt,
+            false
+        );
+    }
+}
