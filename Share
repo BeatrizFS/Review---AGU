@@ -1,45 +1,28 @@
-	public static void shareDependentsOnCreate(List<Account> newAccounts) {
+    @TestVisible
+	public static Map<Id, Id> getPartnerAccountToGroupMap(Set<Id> partnerAccountIds) {
 
-		if (ignoreHandler || newAccounts == null || newAccounts.isEmpty()) {
-			return;
+		Map<Id, Id> partnerAccountToGroup = new Map<Id, Id>();
+
+		if (partnerAccountIds == null || partnerAccountIds.isEmpty()) {
+			return partnerAccountToGroup;
 		}
 
-		List<Account> dependents = new List<Account>();
-		Set<Id> parentIds = new Set<Id>();
-
-		for (Account dependent : newAccounts) {
-			if (dependent.ParentCustomerId__c != null && dependent.Origin__c == 'Web Portal') {
-				dependents.add(dependent);
-				parentIds.add(dependent.ParentCustomerId__c);
-			}
-		}
-
-		if (!parentIds.isEmpty()) {
-			Map<Id, Id> parentToPartnerAccount = new Map<Id, Id>();
-			Set<Id> partnerAccountIds = new Set<Id>();
-
-			for (Account parent : [SELECT Id, Partner_Account__c FROM Account WHERE Id IN :parentIds AND Partner_Account__c != null]) {
-				parentToPartnerAccount.put(parent.Id, parent.Partner_Account__c);
-				partnerAccountIds.add(parent.Partner_Account__c);
-			}
-
-			Map<Id, Id> partnerAccountToGroup = getPartnerAccountToGroupMap(partnerAccountIds);
-			List<AccountShare> sharesToInsert = new List<AccountShare>();
-
-			for (Account dependent : dependents) {
-				Id partnerAccountId = parentToPartnerAccount.get(dependent.ParentCustomerId__c);
-
-				if (partnerAccountId != null) {
-					Id groupId = partnerAccountToGroup.get(partnerAccountId);
-
-					if (groupId != null) {
-						sharesToInsert.add(PrivilegeUtils.buildAccountShare(dependent.Id, groupId));
-					}
+		if (partnerAccountToGroupIds != null) {
+			for (Id partnerAccountId : partnerAccountIds) {
+				if (partnerAccountToGroupIds.containsKey(partnerAccountId)) {
+					partnerAccountToGroup.put(partnerAccountId, partnerAccountToGroupIds.get(partnerAccountId));
 				}
 			}
-
-			if (!sharesToInsert.isEmpty()) {
-				Database.insert(sharesToInsert, false);
-			}
+			return partnerAccountToGroup;
 		}
+
+		for (Partner_Product_Sharing_Setting__mdt setting : [
+			SELECT Partner_Account__r.Partner_Account_Id__c, Partner_Account__r.Group_Id__c
+			FROM Partner_Product_Sharing_Setting__mdt
+			WHERE Partner_Account__r.Partner_Account_Id__c IN :partnerAccountIds
+		]) {
+			partnerAccountToGroup.put(setting.Partner_Account__r.Partner_Account_Id__c, setting.Partner_Account__r.Group_Id__c);
+		}
+
+		return partnerAccountToGroup;
 	}
