@@ -1,0 +1,189 @@
+    "status_code": "500",
+    "error_description": "Unexpected error creating the request: Invalid date/time: ",
+    "error": "Internal Server Error"
+}
+
+{
+  "product_reference": "I_C_BR",
+  "active_start_at": "2028-05-22",
+  "active_end_at": "2029-05-22",
+  "amount_of_policies": 12500,
+  "affected_policy_range": {
+    "external_number_start_at": "1234569890",
+    "external_number_end_at": "1234569890"
+  },
+  "core_benefits": [
+    {
+      "benefit_id": "LACIEMS",
+      "name": "International Emergency Medical Services"
+    }
+  ],
+  "optional_benefits": [
+    {
+      "benefit_id": "LACCELPRO",
+      "name": "Cellphone Protection"
+    }
+  ],
+  "legal_consents": [
+    {
+      "code": "",
+      "is_confirmed": false,
+      "consented_at": ""
+    }
+  ]
+}
+
+mas eu posso passar  "consented_at": "" null deveria funciona
+@RestResource(urlMapping='/sales/enterprise/transversal/benefits_configuration/vexp/benefit_packages/*')
+global with sharing class BenefitsConfigAPIPackages_VEXP {
+
+    private static final String RESOURCE_PATH = '/benefit_packages';
+    private static final String BENEFITS_PRICEBOOK_NAME = 'Visa Benefits';
+    private static final String BENEFIT_PACKAGE_RECORD_TYPE = 'Benefit_Package';
+    private static Id benefitsPricebookId;
+
+
+    private static final Map<String, String> POST_REQUIRED_FIELDS = new Map<String, String>{
+        'product_reference' => 'Primitive',
+        'active_start_at' => 'Primitive',
+        'active_end_at' => 'Primitive',
+        'amount_of_policies' => 'Primitive',
+        'core_benefits' => 'List',
+        'core_benefits.benefit_id' => 'Primitive',
+        'core_benefits.name' => 'Primitive',
+        'optional_benefits.benefit_id' => 'Primitive',
+        'optional_benefits.name' => 'Primitive',
+        'legal_consents' => 'List'
+    };
+
+    private static final Map<String, String> PACKAGE_STATUS = new Map<String, String>{
+        'DRAFT' => 'Draft',
+        'AWAITING_START' => 'Awaiting Start',
+        'ACTIVE' => 'Active',
+        'CANCELLED' => 'Cancelled',
+        'EXPIRED' => 'Expired'
+    };
+
+    @HttpGet
+    global static void doGet() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+        if (segments.isEmpty()) {
+            handleGet();
+        } else if (segments.size() == 1) {
+            handleGetDetails(segments[0]);
+        } else {
+            throw new WebportalApiUtility_v1.RequestAPIException(404, 'not_found', 'Unknown resource path');
+        }
+    }
+
+    @HttpPost
+    global static void doPost() {
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+        if (segments.isEmpty()) {
+            handleCreate();
+        } else {
+            throw new WebportalApiUtility_v1.RequestAPIException(404, 'not_found', 'Unknown resource path');
+        }
+    }
+
+    private static void handleCreate() {
+        try{
+            WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+                RestContext.request,
+                new Set<String>{
+                    'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                    'urn:axa.partners.benefits_platform.write'
+                }
+            );
+
+            String requestBody = RestContext.request.requestBody.toString().trim();
+            requestBody = WebportalApiUtility_v1.removeXMLInjections(requestBody);
+            requestBody = WebportalApiUtility_v1.removeHtmlInjection(requestBody);
+            BenefitPackage request = (BenefitPackage) JSON.deserializeStrict(requestBody, BenefitPackage.class);
+            
+            WebportalApiUtility_v1.runValidateRequiredFields(requestBody, POST_REQUIRED_FIELDS);
+
+            Date startDate = request.active_start_at;
+            Date endDate = request.active_end_at;
+
+            validateCreateRequest(request, startDate, endDate);
+
+            Product__c product = getProduct(request.product_reference);
+            Id pricebookId = getBenefitsPricebookId();
+            
+            //Waiting - Get in token base_currency
+            String currencyIsoCode = 'USD';
+                
+            ServiceContract contract = buildServiceContract(request, product, pricebookId, startDate, endDate);
+            Map<String, Benefit__c> benefitsByReference = getBenefitsByExternalReference(request);
+            Map<String, PricebookEntry> pricebookEntriesByBenefit = getPricebookEntriesByBenefitReference(benefitsByReference, pricebookId, currencyIsoCode);
+
+            insert contract;
+
+            List<ContractLineItem> lineItems = buildContractLineItems(contract.Id, request, startDate, endDate, benefitsByReference, pricebookEntriesByBenefit);
+
+            insert lineItems;
+
+            BenefitPackagePostResponse response = new BenefitPackagePostResponse();
+            response.benefit_package_id = contract.Id;
+
+            RestContext.response.statusCode = 201;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(response));
+            
+        } catch(WebportalApiUtility_v1.RequestAPIException ex) {
+            RestContext.response.statusCode = ex.status_code;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage(
+                        String.valueOf(ex.status_code),
+                        ex.error, ex.error_description),
+                        true
+                    )
+                );
+        } catch (JSONException ex) {
+            RestContext.response.statusCode = 400;
+            RestContext.response.responseBody = Blob.valueOf(JSON.serializePretty(new WebportalApiUtility_v1.ErrorMessage('400', 'Bad Request','The input information received were not compliant with the endpoint specification.')));
+		} catch(DMLException ex) {
+            System.debug(LoggingLevel.ERROR, 'DMLException: ' + ex.getMessage());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage('500', 'database_internal_server_error', 'Error when try to insert record in database.')
+                )
+            );
+        } catch(Exception ex) {
+            System.debug(LoggingLevel.INFO, 'Exception type: ' + ex.getTypeName());
+            System.debug(LoggingLevel.INFO, 'Exception stack tracing: ' + ex.getStackTraceString());
+            RestContext.response.statusCode = 500;
+            RestContext.response.responseBody = Blob.valueOf(
+                JSON.serializePretty(
+                    new WebportalApiUtility_v1.ErrorMessage('500', 'Internal Server Error', 'Unexpected error creating the request: ' + ex.getMessage())
+                )
+            );
+        }
+
+    }
+
+    private static void validateCreateRequest(BenefitPackage request, Date startDate, Date endDate) {
+        if (startDate == null || endDate == null) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'active_start_at and active_end_at must be valid dates.');
+        }
+        if (endDate <= startDate) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'active_end_at must be greater than active_start_at.');
+        }
+        if (request.amount_of_policies == null || request.amount_of_policies < 1) {
+            throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'amount_of_policies must be a positive integer.');
+        }
+        if (request.affected_policy_range != null) {
+            if (String.isBlank(request.affected_policy_range.external_number_start_at)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'affected_policy_range.external_number_start_at is required when policy range is specified.');
+            }
+            if (String.isBlank(request.affected_policy_range.external_number_end_at)) {
+                throw new WebportalApiUtility_v1.RequestAPIException(400, 'bad_request', 'affected_policy_range.external_number_end_at is required when policy range is specified.');
+            }
+        }
+    }
