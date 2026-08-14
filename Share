@@ -1,101 +1,347 @@
-	@TestVisible
-	private static Map<Id, Id> partnerAccountToGroupIds;
+   public static void shareWithPartners(List<Certificates__c> certificates) {
+        if (ignoreHandler) return;
+
+        Set<Id> accountIds = new Set<Id>();
+        for (Certificates__c cert : certificates) {
+            if (cert.Certificate__c != null) {
+                accountIds.add(cert.Certificate__c);
+            }
+        }
+
+        if (accountIds.isEmpty()) return;
+
+        initPartnerSharing();
+
+        Map<Id, Account> accountsMap = new Map<Id, Account>([
+            SELECT Id, Partner_Account__c
+            FROM Account
+            WHERE Id IN :accountIds
+        ]);
+
+        List<Certificates__Share> sharesToInsert = new List<Certificates__Share>();
+        for (Certificates__c cert : certificates) {
+            Account account = accountsMap.get(cert.Certificate__c);
+            if (account != null && account.Partner_Account__c != null) {
+                Id groupId = partnerSharing.get(account.Partner_Account__c);
+
+                sharesToInsert.add(PrivilegeUtils.buildCertificateShare(cert.Id, groupId));
+            }
+        }
+
+        if (!sharesToInsert.isEmpty()) {
+            insert sharesToInsert;
+        }
+    }
+
+    private static void initPartnerSharing() {
+        if (partnerSharing != null) return;
+
+        partnerSharing = new Map<Id, Id>();
+        for (Partner_Sharing_Setting__mdt setting : [
+            SELECT Partner_Account_Id__c, Group_Id__c
+            FROM Partner_Sharing_Setting__mdt
+        ]) {
+            partnerSharing.put(setting.Partner_Account_Id__c, setting.Group_Id__c);
+        }
+    }
+
+-------------------
+
+public class MNAccountBINTriggerHandler {
+    public static Boolean ignoreHandler = false;
+    @TestVisible
+    private static Map<Id, Partner_Product_Sharing_Setting__mdt> productPartnerSharing;
+    @TestVisible
+    private static Map<String, Partner_BIN_Range_Sharing_Setting__mdt> binRangePartnerSharing;
+    @TestVisible
+    private static List<String> binsList;
+
+    public static void shareAccWithPartnerByProduct(Set<Id> newMnAccountBinIds) {
+        if (ignoreHandler) {
+            return;
+        }
+
+        initProductPartnerSharing();
+
+        List<AccountShare> sharesToCreateByAccountId = new List<AccountShare>();
+        List<Account> accountsToUpdate = new List<Account>();
+        List<Certificates__Share> certSharesToCreate = new List<Certificates__Share>();
+        
+        List<Account> accountList = [
+            SELECT Id, Partner_Account__c, 
+            (
+                SELECT BIN__r.Product_Version__c, BIN__r.BIN_Number__c 
+                FROM MN_Account_BIN__r
+                WHERE Is_Deleted__c = false
+                    AND Id IN :newMnAccountBinIds 
+                    AND (BIN__r.Product_Version__c IN :productPartnerSharing.keySet() 
+                    OR BIN__r.BIN_6FirstDigits__c IN: binsList)
+                ORDER BY BIN__r.Product_Version__r.Privilege__c DESC, CreatedDate ASC
+            ),
+            (
+                SELECT Id
+                FROM Certificates__r 
+                WHERE Name LIKE 'CERT%'
+                    AND Owner.Profile.UserType != 'CspLitePortal'
+            ),
+            (
+                SELECT Id
+                FROM Accounts__r
+            )
+            FROM Account
+            WHERE Id IN (
+                SELECT Customer__c
+                FROM MN_Account_BIN__c
+                WHERE Is_Deleted__c = false 
+                    AND Id IN :newMnAccountBinIds 
+                    AND (BIN__r.Product_Version__c IN :productPartnerSharing.keySet()
+                    OR BIN__r.BIN_6FirstDigits__c IN: binsList)
+            )
+            AND Partner_Account__c = null
+            AND ParentCustomerId__c = null
+            AND Inactive__c = false
+        ];
+
+        if (!accountList.isEmpty()) {
+            for (Account account : accountList) {
+                Id partnerAccountId;
+                Id groupId;
+                Boolean isPrivilege = false;
+                
+                Partner_Product_Sharing_Setting__mdt productSetting = productPartnerSharing.get(account.MN_Account_BIN__r[0].BIN__r.Product_Version__c);
+                
+                if (productSetting == null || productSetting.Partner_Account__r == null || productSetting.Partner_Account__r.Group_Id__c == null) {
+                    Partner_BIN_Range_Sharing_Setting__mdt binRangeSetting = new Partner_BIN_Range_Sharing_Setting__mdt();
+                    String binNumber = account.MN_Account_BIN__r[0].BIN__r.BIN_Number__c;
+
+                    if (binRangePartnerSharing.containsKey(binNumber.left(8))) {
+                        binRangeSetting = binRangePartnerSharing.get(binNumber.left(8));
+                    } else if (binRangePartnerSharing.containsKey(binNumber.left(6))) {
+                        binRangeSetting = binRangePartnerSharing.get(binNumber.left(6));
+                    } else {
+                        continue;
+                    }
+
+                    partnerAccountId = binRangeSetting.Partner_Account__r.Partner_Account_Id__c;
+                    groupId = binRangeSetting.Partner_Account__r.Group_Id__c;
+                    isPrivilege = binRangeSetting.Partner_Account__r.Is_Privilege_Scope__c;
+
+                    sharesToCreateByAccountId.add(PrivilegeUtils.buildAccountShare(account.Id, groupId));
+                } else {
+                    partnerAccountId = productSetting.Partner_Account__r.Partner_Account_Id__c;
+                    groupId = productSetting.Partner_Account__r.Group_Id__c;
+                    isPrivilege = productSetting.Partner_Account__r.Is_Privilege_Scope__c;
+
+                    sharesToCreateByAccountId.add(PrivilegeUtils.buildAccountShare(account.Id, productSetting.Partner_Account__r.Group_Id__c));
+                }
+                
+                for (Certificates__c cert : account.Certificates__r) {
+                    certSharesToCreate.add(PrivilegeUtils.buildCertificateShare(cert.Id, groupId));
+                }
+
+                if(account.Accounts__r != null){
+                    for(Account dependent : account.Accounts__r){
+                        sharesToCreateByAccountId.add(PrivilegeUtils.buildAccountShare(dependent.Id, groupId));         
+                    }
+                }                
+
+                accountsToUpdate.add(
+                new Account(
+                    Id = account.Id,
+                    Partner_Account__c = partnerAccountId,
+                    Privilege__c = isPrivilege
+                )
+            );
+            }
+        }
+
+        if (!sharesToCreateByAccountId.isEmpty()) {
+            insert sharesToCreateByAccountId;
+
+            if (!certSharesToCreate.isEmpty()) {
+                insert certSharesToCreate;
+            }
+
+            c_functionsAccount.ignoreHandler = true;
+            update accountsToUpdate;
+            c_functionsAccount.ignoreHandler = false;
+        }
+    }
 
     @TestVisible
-	public static Map<Id, Id> getPartnerAccountToGroupMap(Set<Id> partnerAccountIds) {
+    private static void initProductPartnerSharing() {
+        if (Test.isRunningTest() && productPartnerSharing != null && binRangePartnerSharing != null) {
+            return;
+        }
 
-		Map<Id, Id> partnerAccountToGroup = new Map<Id, Id>();
+        if (productPartnerSharing == null || binRangePartnerSharing == null) {
+            productPartnerSharing = new Map<Id, Partner_Product_Sharing_Setting__mdt>();
+            binRangePartnerSharing = new Map<String, Partner_BIN_Range_Sharing_Setting__mdt>();
+            binsList = new List<String>();
 
-		if (partnerAccountIds == null || partnerAccountIds.isEmpty()) {
-			return partnerAccountToGroup;
-		}
-
-		if (partnerAccountToGroupIds != null) {
-			for (Id partnerAccountId : partnerAccountIds) {
-				if (partnerAccountToGroupIds.containsKey(partnerAccountId)) {
-					partnerAccountToGroup.put(partnerAccountId, partnerAccountToGroupIds.get(partnerAccountId));
-				}
-			}
-			return partnerAccountToGroup;
-		}
-
-		for (Partner_Product_Sharing_Setting__mdt setting : [
-			SELECT Partner_Account__r.Partner_Account_Id__c, Partner_Account__r.Group_Id__c
-			FROM Partner_Product_Sharing_Setting__mdt
-			WHERE Partner_Account__r.Partner_Account_Id__c IN :partnerAccountIds
-		]) {
-			partnerAccountToGroup.put(setting.Partner_Account__r.Partner_Account_Id__c, setting.Partner_Account__r.Group_Id__c);
-		}
-
-		return partnerAccountToGroup;
-	}
+            for (Partner_Sharing_Setting__mdt setup : [
+                SELECT Id,
+                    (SELECT BIN__c, Partner_Account__r.Group_Id__c, Partner_Account__r.Partner_Account_Id__c, Partner_Account__r.Is_Privilege_Scope__c, Is_8_Digit_Bin__c
+                        FROM Partner_BIN_Range_Sharing_Settings__r), 
+                    (SELECT Product_Id__c, Partner_Account__r.Group_Id__c, Partner_Account__r.Partner_Account_Id__c, Partner_Account__r.Is_Privilege_Scope__c
+                        FROM Partner_Product_Sharing_Setting__r) 
+                FROM Partner_Sharing_Setting__mdt
+            ]) {
+                if (!setup.Partner_Product_Sharing_Setting__r.isEmpty()) {
+                    for (Partner_Product_Sharing_Setting__mdt productSettings : setup.Partner_Product_Sharing_Setting__r) {
+                        productPartnerSharing.put(productSettings.Product_Id__c, productSettings);
+                    }
+                }
+                
+                if (!setup.Partner_BIN_Range_Sharing_Settings__r.isEmpty()) {
+                    for (Partner_BIN_Range_Sharing_Setting__mdt binRangeSettings : setup.Partner_BIN_Range_Sharing_Settings__r) {
+                        if (!binRangePartnerSharing.containsKey(binRangeSettings.BIN__c)) {
+                            binRangePartnerSharing.put(binRangeSettings.BIN__c, binRangeSettings);
+                            binsList.add(binRangeSettings.BIN__c.left(6));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
-	public static void shareDependentsOnCreate(List<Account> newAccounts) {
+-----------------------------
 
-		if (ignoreHandler || newAccounts == null || newAccounts.isEmpty()) {
-			return;
-		}
+public without sharing class ShareAccountWithPartnersCTRL {
+    private static Map<Id, Partner_Sharing_Setting__mdt> partnerSharingByGroupId {
+        get {
+            if (partnerSharingByGroupId == null) {
+                partnerSharingByGroupId = new Map<Id, Partner_Sharing_Setting__mdt>();
+                for (Partner_Sharing_Setting__mdt setting : Partner_Sharing_Setting__mdt.getAll().values()) {
+                    if (setting.Group_Id__c != null) {
+                        partnerSharingByGroupId.put(setting.Group_Id__c, setting);
+                    }
+                }
+            }
+            return partnerSharingByGroupId;
+        }
 
-		List<Account> dependents = new List<Account>();
-		Set<Id> parentIds = new Set<Id>();
+        private set;
+    }
 
-		for (Account dependent : newAccounts) {
-			if (dependent.ParentCustomerId__c != null && dependent.Origin__c == 'Web Portal') {
-				dependents.add(dependent);
-				parentIds.add(dependent.ParentCustomerId__c);
-			}
-		}
+    @AuraEnabled(cacheable=true)
+    public static List<PartnersSharingSettings> getPartnersSharingSettings() {
+        List<PartnersSharingSettings> partnersSharingSettings = new List<PartnersSharingSettings>();
+        for (Partner_Sharing_Setting__mdt setting : partnerSharingByGroupId.values()) {
+            PartnersSharingSettings partnerSetting = new PartnersSharingSettings();
+            partnerSetting.partnerAccountName = setting.MasterLabel;
+            partnerSetting.partnerAccountId = setting.Partner_Account_Id__c;
+            partnerSetting.groupId = setting.Group_Id__c;
+            partnerSetting.description = setting.Description__c;
+            partnerSetting.isPrivilegeScope = setting.Is_Privilege_Scope__c;
+            partnersSharingSettings.add(partnerSetting);
+        }
 
-		if (!parentIds.isEmpty()) {
-			Map<Id, Id> parentToPartnerAccount = new Map<Id, Id>();
-			Set<Id> partnerAccountIds = new Set<Id>();
+        return partnersSharingSettings;
+    }
 
-			for (Account parent : [SELECT Id, Partner_Account__c FROM Account WHERE Id IN :parentIds AND Partner_Account__c != null]) {
-				parentToPartnerAccount.put(parent.Id, parent.Partner_Account__c);
-				partnerAccountIds.add(parent.Partner_Account__c);
-			}
+    @AuraEnabled
+    public static Boolean canShareWithPartner(Id accountId) {
+        try {
+            Account account = [
+                SELECT ParentCustomerId__c, RecordType.DeveloperName
+                FROM Account
+                WHERE Id = :accountId
+                LIMIT 1
+            ];
 
-			Map<Id, Id> partnerAccountToGroup = getPartnerAccountToGroupMap(partnerAccountIds);
-			List<AccountShare> sharesToInsert = new List<AccountShare>();
+            if (account.RecordType.DeveloperName != 'PersonAccount') {
+                throw new AuraHandledException('Only Person Accounts can be shared with partners');
+            }
 
-			for (Account dependent : dependents) {
-				Id partnerAccountId = parentToPartnerAccount.get(dependent.ParentCustomerId__c);
+            if (account.ParentCustomerId__c != null) {
+                throw new AuraHandledException('Only CardHolder Accounts can be shared this way with partners');
+            }
 
-				if (partnerAccountId != null) {
-					Id groupId = partnerAccountToGroup.get(partnerAccountId);
+            Set<Id> partnerGroupIds = partnerSharingByGroupId.keySet();
+            if (partnerGroupIds.isEmpty()) {
+                throw new AuraHandledException('No partner groups found');
+            }
 
-					if (groupId != null) {
-						sharesToInsert.add(PrivilegeUtils.buildAccountShare(dependent.Id, groupId));
-					}
-				}
-			}
+            List<AccountShare> shares = [
+                SELECT Id
+                FROM AccountShare
+                WHERE AccountId = :accountId
+                    AND UserOrGroupId IN :partnerGroupIds
+                    AND RowCause = 'Manual'
+                LIMIT 1
+            ];
 
-			if (!sharesToInsert.isEmpty()) {
-				Database.insert(sharesToInsert, false);
-			}
-		}
-	}
+            return shares.isEmpty();
+        } catch (QueryException error) {
+            throw new AuraHandledException('Account not found');
+        }
+    }
 
-Tenho esse grupo publico - BA_GROUP_VISA_HUBS
+    @AuraEnabled
+    public static void updateAndShareWithPartner(Id accountId, PartnersSharingSettings setting) {
+        Savepoint sp = Database.setSavepoint();
+        try {
+            c_functionsAccount.ignoreHandler = true;
+            update new Account(
+                Id = accountId,
+                Partner_Account__c = setting.partnerAccountId,
+                Privilege__c = setting.isPrivilegeScope
+            );
+            c_functionsAccount.ignoreHandler = false;
 
-Partner Sharing Setting
- 
-Help for this Page
-Partner Sharing Setting Edit
-  
- * = Required InformationInformation
-*Label	
-Todos os Hubs
-*Partner Sharing Setting Name	
-Visa
+            insert PrivilegeUtils.buildAccountShare(accountId, setting.groupId);
+            createCertificateShare(accountId, setting.groupId);
+            createDependentShare(accountId, setting.groupId);
+        } catch (DmlException ex) {
+            Database.rollback(sp);
+            System.debug(LoggingLevel.ERROR, ex.getMessage());
+            System.debug(LoggingLevel.FINEST, ex.getStackTraceString());
+            throw new AuraHandledException('Error sharing account with partner');
+        }
+    }
 
-*Partner Account Id	
-001bY00000tBf6cQAC
-*Group Id	
-00GbY00000Lmu3tUAB
-Description	
-Is Privilege Scope	
-Scope Information
-Namespace Prefix	 	Protected Component	
- 	  
+    private static void createCertificateShare(Id accountId, Id groupId) {
+        List<Certificates__Share> certSharesToCreate = new List<Certificates__Share>();
+        List<Certificates__c> certificateList = [SELECT Id FROM Certificates__c WHERE Certificate__c =: accountId AND Name LIKE 'CERT%' AND Owner.Profile.UserType != 'CspLitePortal'];
+
+        if (!certificateList.isEmpty()) {
+            for (Certificates__c cert : certificateList) {
+                certSharesToCreate.add(PrivilegeUtils.buildCertificateShare(cert.Id, groupId));
+            }
+
+            if (!certSharesToCreate.isEmpty()) {
+                insert certSharesToCreate;
+            }
+        }
+    }
+
+    private static void createDependentShare(Id accountId, Id groupId){
+        List<Account> dependents = [SELECT Id FROM Account WHERE ParentCustomerId__c =: accountId];
+        List<AccountShare> sharesToCreate = new List<AccountShare>();
+
+        if(!dependents.isEmpty()){
+            for(Account dependent : dependents){
+                sharesToCreate.add(PrivilegeUtils.buildAccountShare(dependent.Id, groupId));
+            }
+
+            if(!sharesToCreate.isEmpty()){
+                insert sharesToCreate;
+            }
+        }
+
+    }
+
+    @TestVisible
+    private class PartnersSharingSettings {
+        @AuraEnabled public String partnerAccountName { get; set; }
+        @AuraEnabled public String partnerAccountId { get; set; }
+        @AuraEnabled public Id groupId { get; set; }
+        @AuraEnabled public String description { get; set; }
+        @AuraEnabled public Boolean isPrivilegeScope { get; set; }
+    }
+}
+
+
+
