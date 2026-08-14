@@ -1,0 +1,45 @@
+	public static void shareDependentsOnCreate(List<Account> newAccounts) {
+
+		if (ignoreHandler || newAccounts == null || newAccounts.isEmpty()) {
+			return;
+		}
+
+		List<Account> dependents = new List<Account>();
+		Set<Id> parentIds = new Set<Id>();
+
+		for (Account dependent : newAccounts) {
+			if (dependent.ParentCustomerId__c != null && dependent.Origin__c == 'Web Portal') {
+				dependents.add(dependent);
+				parentIds.add(dependent.ParentCustomerId__c);
+			}
+		}
+
+		if (!parentIds.isEmpty()) {
+			Map<Id, Id> parentToPartnerAccount = new Map<Id, Id>();
+			Set<Id> partnerAccountIds = new Set<Id>();
+
+			for (Account parent : [SELECT Id, Partner_Account__c FROM Account WHERE Id IN :parentIds AND Partner_Account__c != null]) {
+				parentToPartnerAccount.put(parent.Id, parent.Partner_Account__c);
+				partnerAccountIds.add(parent.Partner_Account__c);
+			}
+
+			Map<Id, Id> partnerAccountToGroup = getPartnerAccountToGroupMap(partnerAccountIds);
+			List<AccountShare> sharesToInsert = new List<AccountShare>();
+
+			for (Account dependent : dependents) {
+				Id partnerAccountId = parentToPartnerAccount.get(dependent.ParentCustomerId__c);
+
+				if (partnerAccountId != null) {
+					Id groupId = partnerAccountToGroup.get(partnerAccountId);
+
+					if (groupId != null) {
+						sharesToInsert.add(PrivilegeUtils.buildAccountShare(dependent.Id, groupId));
+					}
+				}
+			}
+
+			if (!sharesToInsert.isEmpty()) {
+				Database.insert(sharesToInsert, false);
+			}
+		}
+	}
