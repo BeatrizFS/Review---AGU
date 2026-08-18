@@ -1,0 +1,416 @@
+@HttpPost
+global static void doPost() {
+    RestContext.response.addHeader('Content-Type', 'application/json');
+
+    List<String> segments = getResourceSegments(RESOURCE_PATH);
+
+    if (segments.isEmpty()) {
+        handleCreate();
+    } else if (segments.size() == 2 && segments[1] == 'complete') {
+        handleComplete(segments[0]);
+    } else if (segments.size() == 2 && segments[1] == 'cancel') {
+        handleCancel(segments[0]);
+    } else {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            404,
+            'not_found',
+            'Unknown resource path'
+        );
+    }
+}
+
+private static void handleComplete(String benefitPackageId) {
+    try {
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                'urn:axa.partners.benefits_platform.write'
+            }
+        );
+
+        List<ServiceContract> packages = [
+            SELECT Id,
+                Package_Status__c,
+                Product_Reference__c,
+                StartDate,
+                EndDate,
+                Amount_of_Policies__c,
+                Policy_Range_Start__c,
+                Policy_Range_End__c,
+                Product__c,
+                (SELECT Id, Benefit_Category__c
+                 FROM ContractLineItems)
+            FROM ServiceContract
+            WHERE Id = :benefitPackageId
+            AND RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
+
+        if (packages.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                'Not Found',
+                'The searched resource was not found.'
+            );
+        }
+
+        ServiceContract contract = packages[0];
+
+        // /complete só pode ser executado em Draft
+        if (contract.Package_Status__c != PACKAGE_STATUS.get('DRAFT')) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'Benefit package cannot be completed because its current status is '
+                    + contract.Package_Status__c
+                    + '.'
+            );
+        }
+
+        validateCompleteRequest(contract);
+
+        contract.Package_Status__c = PACKAGE_STATUS.get('AWAITING_START');
+        contract.Completed_At__c = System.now();
+
+        update contract;
+
+        RestContext.response.statusCode = 204;
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+        RestContext.response.statusCode = ex.status_code;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    String.valueOf(ex.status_code),
+                    ex.error,
+                    ex.error_description
+                )
+            )
+        );
+
+    } catch (DMLException ex) {
+        System.debug(LoggingLevel.ERROR, 'DMLException: ' + ex.getMessage());
+        System.debug(LoggingLevel.ERROR, 'DMLException stack trace: ' + ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'database_internal_server_error',
+                    'Error when try to complete benefit package.'
+                )
+            )
+        );
+
+    } catch (Exception ex) {
+        System.debug(LoggingLevel.ERROR, 'Exception type: ' + ex.getTypeName());
+        System.debug(LoggingLevel.ERROR, 'Exception stack tracing: ' + ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error completing the benefit package: ' + ex.getMessage()
+                )
+            )
+        );
+    }
+}
+
+private static void validateCompleteRequest(ServiceContract contract) {
+
+    // Product Reference
+    if (String.isBlank(contract.Product_Reference__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'Product_Reference__c is required.'
+        );
+    }
+
+    // Amount of policies
+    if (contract.Amount_of_Policies__c == null ||
+        contract.Amount_of_Policies__c < 1) {
+
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'Amount_of_Policies__c must be at least 1.'
+        );
+    }
+
+    // Start date
+    if (contract.StartDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'StartDate is required.'
+        );
+    }
+
+    // End date
+    if (contract.EndDate == null) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'EndDate is required.'
+        );
+    }
+
+    // Date range
+    if (contract.EndDate <= contract.StartDate) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'EndDate must be greater than StartDate.'
+        );
+    }
+
+    // Account range
+    if (String.isBlank(contract.Policy_Range_Start__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'Policy range start is required.'
+        );
+    }
+
+    if (String.isBlank(contract.Policy_Range_End__c)) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'Policy range end is required.'
+        );
+    }
+
+    // Core benefit
+    Boolean hasCoreBenefit = false;
+
+    for (ContractLineItem lineItem : contract.ContractLineItems) {
+        if (lineItem.Benefit_Category__c == 'Core') {
+            hasCoreBenefit = true;
+            break;
+        }
+    }
+
+    if (!hasCoreBenefit) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            400,
+            'bad_request',
+            'At least one Core Benefit is required.'
+        );
+    }
+
+    // TODO:
+    // Validate BIN exists, is approved and belongs to caller's bank.
+}
+
+private static void handleCancel(String benefitPackageId) {
+    try {
+        WebportalAPITokenAuthentication_v1.parseAndValidateSecurityToken(
+            RestContext.request,
+            new Set<String>{
+                'urn:axa.partners.sales.enterprise.transversal.benefits_configuration.benefit_packages.write',
+                'urn:axa.partners.benefits_platform.write'
+            }
+        );
+
+        List<ServiceContract> packages = [
+            SELECT Id,
+                Package_Status__c
+            FROM ServiceContract
+            WHERE Id = :benefitPackageId
+            AND RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+            LIMIT 1
+        ];
+
+        if (packages.isEmpty()) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                404,
+                'Not Found',
+                'The searched resource was not found.'
+            );
+        }
+
+        ServiceContract contract = packages[0];
+
+        Set<String> cancellableStatuses = new Set<String>{
+            PACKAGE_STATUS.get('DRAFT'),
+            PACKAGE_STATUS.get('AWAITING_START'),
+            PACKAGE_STATUS.get('ACTIVE')
+        };
+
+        if (!cancellableStatuses.contains(contract.Package_Status__c)) {
+            throw new WebportalApiUtility_v1.RequestAPIException(
+                400,
+                'bad_request',
+                'Benefit package cannot be cancelled because its current status is '
+                    + contract.Package_Status__c
+                    + '.'
+            );
+        }
+
+        contract.Package_Status__c = PACKAGE_STATUS.get('CANCELLED');
+        contract.Cancelled_At__c = System.now();
+
+        // Quando você tiver o contexto do caller:
+        // contract.Cancelled_By__c = context.agentContactId;
+
+        update contract;
+
+        RestContext.response.statusCode = 204;
+
+    } catch (WebportalApiUtility_v1.RequestAPIException ex) {
+        RestContext.response.statusCode = ex.status_code;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    String.valueOf(ex.status_code),
+                    ex.error,
+                    ex.error_description
+                )
+            )
+        );
+
+    } catch (DMLException ex) {
+        System.debug(LoggingLevel.ERROR, 'DMLException: ' + ex.getMessage());
+        System.debug(LoggingLevel.ERROR, 'DMLException stack trace: ' + ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'database_internal_server_error',
+                    'Error when try to cancel benefit package.'
+                )
+            )
+        );
+
+    } catch (Exception ex) {
+        System.debug(LoggingLevel.ERROR, 'Exception type: ' + ex.getTypeName());
+        System.debug(LoggingLevel.ERROR, 'Exception stack tracing: ' + ex.getStackTraceString());
+
+        RestContext.response.statusCode = 500;
+        RestContext.response.responseBody = Blob.valueOf(
+            JSON.serializePretty(
+                new WebportalApiUtility_v1.ErrorMessage(
+                    '500',
+                    'Internal Server Error',
+                    'Unexpected error cancelling the benefit package: ' + ex.getMessage()
+                )
+            )
+        );
+    }
+}
+
+private static ServiceContract getBenefitPackage(String benefitPackageId) {
+
+    List<ServiceContract> packages = [
+        SELECT Id,
+            Package_Status__c,
+            Product_Reference__c,
+            Product__c,
+            Pricebook2Id,
+            StartDate,
+            EndDate,
+            Term,
+            Amount_of_Policies__c,
+            Policy_Range_Start__c,
+            Policy_Range_End__c,
+            Legal_Consent_Code__c,
+            Legal_Consent_Confirmed__c,
+            Legal_Consent_Date__c,
+            (SELECT Id, Benefit_Category__c
+             FROM ContractLineItems)
+        FROM ServiceContract
+        WHERE Id = :benefitPackageId
+        AND RecordType.DeveloperName = :BENEFIT_PACKAGE_RECORD_TYPE
+        LIMIT 1
+    ];
+
+    if (packages.isEmpty()) {
+        throw new WebportalApiUtility_v1.RequestAPIException(
+            404,
+            'Not Found',
+            'The searched resource was not found.'
+        );
+    }
+
+    return packages[0];
+}
+
+ServiceContract contract = getBenefitPackage(benefitPackageId);
+
+if (contract.Package_Status__c != PACKAGE_STATUS.get('DRAFT')) {
+    throw new WebportalApiUtility_v1.RequestAPIException(
+        400,
+        'bad_request',
+        'Benefit package cannot be completed because its current status is '
+            + contract.Package_Status__c + '.'
+    );
+}
+
+validateCompleteRequest(contract);
+
+contract.Package_Status__c = PACKAGE_STATUS.get('AWAITING_START');
+contract.Completed_At__c = System.now();
+
+update contract;
+
+RestContext.response.statusCode = 204;
+
+ServiceContract contract = getBenefitPackage(benefitPackageId);
+
+Set<String> cancellableStatuses = new Set<String>{
+    PACKAGE_STATUS.get('DRAFT'),
+    PACKAGE_STATUS.get('AWAITING_START'),
+    PACKAGE_STATUS.get('ACTIVE')
+};
+
+if (!cancellableStatuses.contains(contract.Package_Status__c)) {
+    throw new WebportalApiUtility_v1.RequestAPIException(
+        400,
+        'bad_request',
+        'Benefit package cannot be cancelled because its current status is '
+            + contract.Package_Status__c + '.'
+    );
+}
+
+contract.Package_Status__c = PACKAGE_STATUS.get('CANCELLED');
+contract.Cancelled_At__c = System.now();
+
+update contract;
+
+RestContext.response.statusCode = 204;
+
+
+
+POST /benefit_packages
+        │
+        ▼
+      Draft
+        │
+        ├────────────── PATCH ──────────────┐
+        │                                   │
+        │                                   ▼
+        │                              continua Draft
+        │
+        ├── POST /complete ──► valida estrutura
+        │                         │
+        │                         ▼
+        │                   Awaiting Start
+        │
+        └── POST /cancel ───► Cancelled
+
+Awaiting Start
+        │
+        └── POST /cancel ───► Cancelled
+
+Active
+        │
+        └── POST /cancel ───► Cancelled
